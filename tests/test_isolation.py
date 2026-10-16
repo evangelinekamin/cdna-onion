@@ -88,6 +88,13 @@ def test_isolation_fails_closed(monkeypatch):
         isolation.wrap_command(["entry"], None, True)
 
 
+def test_verify_workers_leave_the_entry_its_cpus(monkeypatch):
+    # Slurm cpusets show up in the affinity mask; os.cpu_count() would see all 48 cores.
+    for allowed, workers in ((range(48), 8), (range(4), 2), (range(3), 1), (range(1), 1)):
+        monkeypatch.setattr(isolation.os, "sched_getaffinity", lambda pid, a=allowed: set(a))
+        assert isolation.default_verify_workers() == workers
+
+
 def test_default_cpus_come_from_the_allowed_set():
     cpus = isolation.default_cpus()
     assert 1 <= len(cpus) <= 2 and set(cpus) <= set(isolation.os.sched_getaffinity(0))

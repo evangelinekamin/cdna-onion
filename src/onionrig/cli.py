@@ -222,7 +222,7 @@ def _bench_options(p: argparse.ArgumentParser) -> None:
     p.add_argument("--strict-thermal", action="store_true",
                    help="exclude runs with missing telemetry or persistent throttling")
     p.add_argument("--no-telemetry", action="store_true")
-    p.add_argument("--verify-workers", type=int, default=min(8, os.cpu_count() or 1))
+    p.add_argument("--verify-workers", type=int, default=isolation.default_verify_workers())
 
 
 def build_parser() -> argparse.ArgumentParser:

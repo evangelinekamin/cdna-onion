@@ -102,9 +102,21 @@ def scrubbed_environment(env: Mapping[str, str], home: Path) -> dict[str, str]:
     return kept
 
 
-def default_cpus(count: int = 2) -> tuple[int, ...]:
+ENTRY_CPUS = 2  # CPUs an entry is pinned to by default
+
+
+def default_cpus(count: int = ENTRY_CPUS) -> tuple[int, ...]:
     """The first `count` CPUs this process may use (Slurm cpusets included)."""
     return tuple(sorted(os.sched_getaffinity(0))[:count])
+
+
+def default_verify_workers(cap: int = 8) -> int:
+    """Hit-verification processes: the allowed CPUs the entry is not pinned to.
+
+    Uses the affinity mask, not os.cpu_count(), which on a cluster node counts
+    every core rather than the job's allocation.
+    """
+    return max(1, min(cap, len(os.sched_getaffinity(0)) - ENTRY_CPUS))
 
 
 def wrap_command(argv: list[str], cpus: tuple[int, ...] | None, isolate: bool) -> list[str]:
