@@ -15,6 +15,7 @@ build/
 bench/
 search/
 results/
+onionrig-*.log
 # Start scalars belong outside the repo entirely (keygen refuses this tree)
 keys/
 # Secrets: never commit start scalars or Tor secret keys

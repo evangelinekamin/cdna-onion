@@ -2,6 +2,7 @@
 
 import json
 import shutil
+from pathlib import Path
 
 import pytest
 
@@ -23,6 +24,26 @@ def amd_document(hotspot=55, power=300, gfx=(1700, 1690), status="UNTHROTTLED"):
              "power": {"socket_power": unit(power, "W"), "throttle_status": status,
                        "gfx_voltage": "N/A"},
              "clock": clocks}]
+
+
+# Captured from amd-smi 26.2.2 (ROCm 7.2.3) on Sol's MI210 (node sg250), idle. This
+# version wraps the per-GPU list in {"gpu_data": [...]}, unlike amd-smi's older source.
+MI210_IDLE = json.loads((Path(__file__).parent / "fixtures" / "amd-smi-metric-mi210.json")
+                        .read_text())
+
+
+def test_parse_amd_real_mi210_output():
+    s = tm.parse_amd(MI210_IDLE, 2.0, hot_c=100)
+    assert (s.t, s.temp_c, s.power_w, s.sclk_mhz) == (2.0, 41.0, 45.0, 800.0)
+    assert s.thermal_throttle is False and s.power_capped is False
+
+
+def test_parse_amd_sections_that_are_not_objects():
+    s = tm.parse_amd({"gpu_data": [{"temperature": "N/A", "power": "N/A", "clock": "N/A"}]},
+                     0.0, hot_c=100)
+    assert (s.temp_c, s.power_w, s.sclk_mhz, s.thermal_throttle) == (None, None, None, None)
+    with pytest.raises(ValueError):
+        tm.parse_amd({"gpu_data": []}, 0.0, hot_c=100)
 
 
 def test_parse_nvidia_idle_row():

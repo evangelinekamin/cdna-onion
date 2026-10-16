@@ -68,15 +68,24 @@ def _amd_value(field: object) -> float | None:
     return float(field) if isinstance(field, int | float) else None
 
 
+def _section(gpu: dict, name: str) -> dict:
+    """One object of amd-smi's per-GPU JSON; anything else (such as "N/A") reads as empty."""
+    value = gpu.get(name)
+    return value if isinstance(value, dict) else {}
+
+
 def parse_amd(document: object, t: float, hot_c: float) -> Sample:
-    """`amd-smi metric -p -c -t --json` output (ROCm 7.x schema) for one GPU."""
+    """`amd-smi metric -p -c -t --json` output (ROCm 7.x schema) for one GPU.
+
+    amd-smi 26.x (ROCm 7.2) wraps the per-GPU list as {"gpu_data": [...]}.
+    """
+    if isinstance(document, dict) and "gpu_data" in document:
+        document = document["gpu_data"]
     gpu = document[0] if isinstance(document, list) and document else document
     if not isinstance(gpu, dict):
         raise ValueError("unexpected amd-smi JSON")
-    temps = gpu.get("temperature") or {}
+    temps, power, clocks = (_section(gpu, name) for name in ("temperature", "power", "clock"))
     temp = _amd_value(temps.get("hotspot")) or _amd_value(temps.get("edge"))
-    power = gpu.get("power") or {}
-    clocks = gpu.get("clock") or {}
     gfx = [_amd_value(v.get("clk")) for k, v in clocks.items()
            if k.startswith("gfx_") and isinstance(v, dict)]
     gfx = [c for c in gfx if c is not None]
