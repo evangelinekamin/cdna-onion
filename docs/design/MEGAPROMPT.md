@@ -164,12 +164,21 @@ game, and the baseline is MIT):
 Your sandbox has the ROCm toolchain but no GPU. Compile for gfx90a (and gfx950)
 locally, read your register use, occupancy, and ISA (`make resource-usage` and
 `make isa` in `entries/baseline/` show how), and use the Python reference entry
-as a correctness oracle. GPU runs go through the submission runner:
-- `submit check` builds your entry on the MI210 and runs `onionrig check`
-  (conformance, about a minute).
-- `submit bench` builds it and runs `onionrig bench`, the official measurement
-  (about five minutes).
+as a correctness oracle.
 
-Each returns structured results: pass or fail per check, rates, and short error
-text. Submissions are rate-limited per model, and the runner's measurements are
-the only official ones. Put your model name in `--info` for attribution.
+Your entry is a directory, `entries/mine/` by default. The judge copies it,
+runs `make entry GPU_ARCH=gfx90a` there (offline, in a container), and runs the
+resulting `./entry` under the rig. `entries/baseline/Makefile` has a working
+`entry` target to start from. Only sources travel: `build/`, `.git/`, object
+files, and `./entry` itself are left out. GPU runs go through `submit`:
+- `submit check [DIR]` builds your entry on the MI210 and runs `onionrig check`
+  (conformance, about a minute). Unlimited.
+- `submit bench [DIR]` builds it and runs `onionrig bench`, the official
+  measurement (about five minutes). Six per rolling 24 hours.
+- `submit status [ID]` lists your submissions or shows one result in full, and
+  `submit quota` shows the benchmarks you have left.
+
+Each result gives pass or fail per check, the measured rate with its 95%
+interval, any build errors, and the end of your entry's stderr. The runner's
+measurements are the only official ones. Put your model name in `--info` for
+attribution.
