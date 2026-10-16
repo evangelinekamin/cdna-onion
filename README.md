@@ -103,7 +103,9 @@ Do not loosen the permissions.
   analysis shows occupancy of 1 wave/SIMD, the first lever for AMD entries. On
   Sol's MI210 it conforms and measures 1.45 G candidates/s (95% CI 1.43 to 1.46).
 - MI210 microbenchmarks: the 32x32+64 integer multiply-add runs at the FP64 FMA
-  rate, so FP64 has no VALU edge on that card (`docs/design/CDNA-PERF-REFERENCE.md`
+  rate, so FP64 has no VALU edge on that card. Per effective clock every VALU
+  instruction issues at about 97% of peak; under dense ALU load the card clocks
+  7 to 18% below what `amd-smi` reports (`docs/design/CDNA-PERF-REFERENCE.md`
   section 8).
 - Next: the model competition (`docs/design/MEGAPROMPT.md`), and the same job on
   an MI355X.

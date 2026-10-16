@@ -137,7 +137,8 @@ game, and the baseline is MIT):
 - `docs/design/CDNA-PERF-REFERENCE.md`: the per-generation CDNA performance model
   and **section 8, what has been measured so far**. For example, the faithful
   NVIDIA port runs at occupancy 1 wave/SIMD on gfx90a and gfx950 (256 VGPRs,
-  ~31 KB scratch per lane).
+  ~31 KB scratch per lane), and the MI210 lowers its effective clock under dense
+  64-bit ALU work, more so the more registers each instruction reads.
 - `docs/research/literature.md`, `tools.md`, `competitions.md`: the research sweep.
 - `docs/research/gpumode-craft.md`: actionable CDNA kernel-tuning craft
   (VGPR/occupancy levers, branchless reduction, the rocprof-compute workflow).

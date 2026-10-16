@@ -92,9 +92,10 @@ MI250X, so do not apply it to MI210):
 | MI355X (scale box) | CDNA4 | 78.6 TF | 78.6 TF | **none** |
 
 **Measured on the MI210 (section 8): integer MAD runs at the FP64 FMA rate.**
-`v_mad_u64_u32` and `v_fma_f64` sustain 51.2 and 51.3 operations per CU per
-nominal clock, so the literature prior that CDNA's integer multiply is slow does
-not hold for gfx90a's VALU. An exact 52x52-bit FP64 limb product takes about
+`v_mad_u64_u32` and `v_fma_f64` each issue at 62 of 64 lanes per CU per
+effective clock and run at the same effective clock (1.40 GHz under full load),
+so the literature prior that CDNA's integer multiply is slow does not hold for
+gfx90a's VALU. An exact 52x52-bit FP64 limb product takes about
 three operations (two FMAs and a subtraction, the Dekker-style split), roughly
 900 bits² of product per operation, against 1,024 for one 32x32 multiply-add.
 At equal issue rates that leaves FP64 no edge on MI210's VALU, and integer
@@ -215,44 +216,77 @@ section 3 found in the ISA guide. Here it shows up in real codegen.
 
 ### Primitive throughput (`tools/microbench`)
 
-Each kernel was confirmed in the ISA to compile to exactly the instruction it
-measures. Units: operations per compute unit per nominal clock. Each figure is
-the mean of 5 samples of about 100 ms, taken after the clocks settle; on the
-4060 Ti, three runs from an idle GPU agree within 0.5%. A figure above the
-part's lane width (64 integer lanes per SM on Ada) means it boosted above its
-nominal clock.
+Each kernel compiles to exactly the instruction it measures: the ISA shows 8
+counted VALU instructions per loop trip plus 3 scalar loop-control ones. Each
+figure is the mean of 30 samples of about 150 ms, taken after the clocks settle.
+Units are operations per compute unit per clock, at two clocks: the nominal
+(peak) clock the device reports, and the **effective** clock the kernel actually
+ran at. Every block reads the shader cycle counter and a fixed-rate wall clock at
+its start and end; their ratio is the effective clock. On the 4060 Ti this
+in-kernel clock matches `nvidia-smi` within 0.6% in every test.
 
-| Primitive | RTX 4060 Ti (sm_89), reference | MI210 | MI355X |
+| Primitive | RTX 4060 Ti, effective clock | MI210, nominal clock | MI210, effective clock | MI355X |
+|---|---|---|---|---|
+| `v_mad_u64_u32` (32x32+64) | 29.1 | 50.9 | **61.7** | TBD |
+| `v_mul_lo_u32` | 63.4 | 55.5 | 61.9 | TBD |
+| `v_mul_hi_u32` + add | 30.7 | 28.0 | 31.3 | TBD |
+| `v_fma_f64` | 1.7 (Ada consumer FP64 is 1/64 rate) | 51.2 | **62.3** | TBD |
+| `v_fma_f64`, one VGPR operand | 1.7 | 57.5 | 61.8 | TBD |
+| FP32 FMA (`v_pk_fma_f32` on CDNA) | 107.1 | 106.3 | 122.1 (packed) | TBD |
+| ref10 `fe_mul` | 0.157 (14.8 G/s) | 0.232 (41.0 G/s) | 0.273 | TBD |
+
+The MI210 columns come from Sol (node sg250, ROCm 7.2.3, 2026-10-16). Three runs,
+one inside the rig's namespace sandbox, agree within 1.4%; the run with longer
+samples reads slightly lower.
+
+**Per effective clock, every MI210 instruction issues at about 97% of peak**: 62
+of 64 lanes per CU for the integer MAD, both FP64 FMAs, and the 32-bit
+multiplies, and 122 of 128 for packed FP32. The shortfall at the nominal clock is
+the clock. Under dense ALU load the card runs well below its 1,700 MHz peak, by
+an amount that depends on the instruction:
+
+| MI210 test | Effective clock (in-kernel) | `amd-smi` clock | Power at end of test |
 |---|---|---|---|
-| `v_mad_u64_u32` (32x32+64) | 31.8 | **51.2** | TBD |
-| `v_mul_lo_u32` | 67.0 | 55.5 | TBD |
-| `v_mul_hi_u32` + add | 33.6 | 27.9 | TBD |
-| `v_fma_f64` | 1.78 (Ada consumer FP64 is 1/64 rate) | **51.3** | TBD |
-| FP32 FMA (`v_pk_fma_f32` on CDNA) | 113.5 | 107.7 (packed) | TBD |
-| ref10 `fe_mul` | 0.166 (14.7 G/s) | 0.235 (41.5 G/s) | TBD |
+| `v_mad_u64_u32` (32x32+64) | 1,401 MHz | 1,605-1,700 MHz | 284 W |
+| `v_mul_lo_u32` | 1,525 MHz | 1,700 MHz | 282 W |
+| `v_mul_hi_u32` + add | 1,520 MHz | 1,700 MHz | 291 W |
+| `v_fma_f64` | 1,397 MHz | 1,595-1,695 MHz | 296 W |
+| `v_fma_f64`, one VGPR operand | 1,583 MHz | 1,700 MHz | 224 W |
+| FP32 FMA (`v_pk_fma_f32`) | 1,481 MHz | 1,655-1,700 MHz | 289 W |
+| ref10 `fe_mul` | 1,445 MHz | 1,630-1,700 MHz | 298 W |
 
-The MI210 column comes from Sol (node sg250, ROCm 7.2.3, 2026-10-16). Two
-independent runs, one of them inside the rig's namespace sandbox, agree within
-0.1%, and samples within a run within 0.1%.
+Three findings:
 
-On the 4060 Ti, the baseline's hot loop runs at about 78% of the isolated
-`fe_mul` rate: field-multiply bound, as expected. On the MI210 the integer MAD
-and the FP64 FMA tie, which settles the VALU side of the fork for this card
-(section 4). Both land on exactly 51.2, four-fifths of the 64 lanes per CU per
-clock. That is either a five-cycle issue for these 64-bit three-operand
-instructions or a lower sustained clock under pure ALU load than the 1.65 GHz
-the grind runs at; the microbenchmark does not sample clocks, so this is open.
+- **`amd-smi` does not show it.** Its clock field reads 1,595 to 1,700 MHz while
+  the shader cycle counter shows 1,397 to 1,583: under dense ALU load the card
+  executes 7 to 18% fewer cycles than its monitoring tool reports. Its power field
+  is a smoothed average that lags by seconds (it climbs from 110 to 284 W through
+  the first test). Judge kernels by measured throughput, not reported clocks.
+- **It is not the 300 W average limit.** The one-operand FMA holds an effective
+  1.58 GHz while drawing under 225 W. The slowdown follows how hard each
+  instruction works the chip, consistent with fast current-based throttling or
+  clock stretching rather than the average power cap.
+- **Register traffic costs clock.** The same FMA reading one register pair instead
+  of three runs 13% faster, at the same issue efficiency. On this card, fewer
+  operand reads means more throughput, not just less energy.
+
+The integer MAD and the FP64 FMA tie on both counts, issue rate and effective
+clock (1.40 GHz each), so the VALU side of the fork stands as section 4 says. On
+the 4060 Ti, the baseline's hot loop runs at about 78% of the isolated `fe_mul`
+rate: field-multiply bound, as expected.
 
 ### The baseline on the MI210 (Sol, measured)
 
 On the MI210 the baseline passes all seven conformance checks, inside the rig's
-namespace sandbox, and measures **1.45 G candidates/s (95% CI 1.43 to 1.46)**: three 60 s runs, each from a cooled
-start. That is 1.52x the RTX 4060 Ti, still at occupancy 1. During the runs the
-card drew about 255 W of its 300 W limit, held a mean 1.65 GHz, peaked at
-87 °C, and never throttled. The 10 s calibration run on the cool card measured
-1.54 G/s, so a short benchmark on a cool MI210 overstates sustained throughput by
-about 6%; this is why the rig times 60 s runs. At this rate one MI210 needs a
-median 6.2 days for a 10-character prefix.
+namespace sandbox, and measures **1.45 G candidates/s (95% CI 1.43 to 1.46)**:
+three 60 s runs, each from a cooled start. A second job reproduced it at 1.44 G/s
+(95% CI 1.41 to 1.47). That is 1.52x the RTX 4060 Ti, still at occupancy 1.
+During the runs the card drew about 255 W of its 300 W limit and peaked at 87 °C,
+without throttling by `amd-smi`'s account, which reported a mean 1.65 GHz (an
+overstatement under dense ALU load; see above). The 10 s calibration run on the
+cool card measured 1.54 G/s, so a short benchmark on a cool MI210 overstates
+sustained throughput by about 6%; this is why the rig times 60 s runs. At this
+rate one MI210 needs a median 6.2 days for a 10-character prefix.
 
 ### Benchmark methodology finding
 

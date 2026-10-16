@@ -72,7 +72,7 @@ The whole `results/<run>/` directory. The most important files:
 | `telemetry-probe.txt` | real `amd-smi` output, to validate the telemetry parser on CDNA |
 | `environment.txt` | node, driver, compiler, and which GPU Slurm handed the job |
 | `microbench-telemetry.jsonl` | power, temperature, and clock sampled through the microbenchmarks |
-| `seff.txt` | CPU and memory efficiency of the job (`seff`), to keep the request right-sized |
+| `seff.txt` | CPU and memory efficiency (`seff`), to keep the request right-sized. Its RUNNING warning is expected: the work ran as a finished job step, and the figures match `seff` run after the job |
 
 The telemetry parser was written from `amd-smi`'s own source, and it has not
 yet seen output from a live MI210. If the probe looks wrong, that file is what
