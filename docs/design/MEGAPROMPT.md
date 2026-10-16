@@ -51,8 +51,8 @@ Full detail in `docs/design/ARCHITECTURE.md` sec 2. The essentials:
   addition per candidate, not a scalar multiply).
 - Point adds yield projective coords; recovering affine y needs an inversion ->
   amortize with **Montgomery batch inversion** (one inversion per group of N).
-  Known pillars: y-only arithmetic; the dual addition law (2 candidates/add,
-  ~5.5 muls); affine beats Jacobian for N>20.
+  Best published so far, and not known to be optimal: y-only arithmetic; the
+  dual addition law (2 candidates/add, ~5.5 muls); affine beats Jacobian for N>20.
 - Field is F_p, p = 2^255-19. The limb representation is the main design fork
   (integer radix-2^32 vs FP64 radix-2^51 vs FP64-matrix).
 

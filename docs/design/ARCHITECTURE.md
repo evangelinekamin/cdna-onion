@@ -211,9 +211,10 @@ gfx90a/gfx950), MIT-licensed, and ships a free calibration+correctness harness
 (`--bench`, RFC-8032 self-tests, a differential test against double-and-add,
 per-hit re-derivation, `verify.py`). Its algebra is deliberately previous-
 generation (ref10 10x25.5 limbs, single moving point, ~12 muls/candidate, no
-y-only) -- which makes it an *honest* floor: the clean-room dual-law target
-should roughly halve field muls (~12 -> ~5.5), and we measure that exact win on
-the same AMD card. It is not an entry; it calibrates the rig.
+y-only) -- which makes it an *honest* floor: the best published algebra (dual
+law, y-only) needs about half the field muls (~12 -> ~5.5), and the gap between
+this floor and the entries measures what algebra and tuning buy on the same AMD
+card. It is not an entry; it calibrates the rig.
 Second, zero-port AMD reference: **0xROOTPLS/prefix32** already runs on AMD via
 ROCm's OpenCL runtime (dual-law, 4x u64, benchmarked on an RX 6800 XT), giving an
 existing SOTA-class AMD datapoint to calibrate against with no porting (but do

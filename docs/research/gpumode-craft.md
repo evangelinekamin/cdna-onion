@@ -107,7 +107,8 @@ modes (`-mcumode`), the 4-bank cached-read VGPR model, wave32. Transferable bits
 ISA as the spill signal; `__launch_bounds__` to stop the compiler spilling under double-buffering; use
 SGPR base + per-lane VGPR offset to cut address-math VALU; split global loads into small chunks across the
 loop to reduce SIMD contention; microbench showed a **~75% VALU-utilization practical ceiling** (don't chase
-100%).
+100%) for their MI300 kernels. That is their observation, not a limit here: our MI210 microbenchmarks issue
+at about 97% of peak per effective clock (`docs/design/CDNA-PERF-REFERENCE.md` section 8).
 
 ### 1.5 HF "Creating custom kernels for the AMD MI300" [V]
 - MI300X: **256 VGPRs/thread max, ≤16 waves/CU** in that article's framing, wave64, 64 KiB LDS + 32 KiB L1,
@@ -237,7 +238,8 @@ Workflow: get a Speed-of-Light first, then drill into the CU block.
   (**wavefront occupancy**, active cycles). First question: are we VGPR/LDS/SGPR-limited on occupancy?
 - **Instruction mix:** counts of **VALU / VMEM / SALU / LDS / MFMA (matrix)** instructions issued →
   confirms we're VALU/MAC-bound (expected) not memory-bound.
-- **VALU utilization / busy** → how close to the ~75% practical ceiling (Seb V); low VALU busy with low
+- **VALU utilization / busy** → how close to peak (Seb V saw ~75% on MI300 kernels; simple MI210 loops
+  reach ~97% per effective clock, CDNA-PERF-REFERENCE section 8); low VALU busy with low
   occupancy = raise waves; high VALU busy = we're instruction-bound and must cut *instructions* (better
   reduction, `v_bitop3`, fewer carries).
 - **LDS bank-conflict rate** = cycles in LDS scheduler due to conflicts / uncontended base cycles → tune §3.
