@@ -75,7 +75,7 @@ def test_environment_keeps_runtime_variables_only(tmp_path):
 
 
 def test_wrap_command(monkeypatch):
-    monkeypatch.setattr(isolation, "isolation_available", lambda: True)
+    monkeypatch.setattr(isolation, "isolation_prefix", lambda: isolation.ISOLATE)
     wrapped = isolation.wrap_command(["entry"], (0, 2), True)
     assert wrapped[:len(isolation.ISOLATE)] == list(isolation.ISOLATE)
     assert wrapped[len(isolation.ISOLATE) + 1:] == ["--cpu-list", "0,2", "entry"]
@@ -83,9 +83,27 @@ def test_wrap_command(monkeypatch):
 
 
 def test_isolation_fails_closed(monkeypatch):
-    monkeypatch.setattr(isolation, "isolation_available", lambda: False)
+    monkeypatch.setattr(isolation, "isolation_prefix", lambda: None)
     with pytest.raises(isolation.IsolationUnavailable, match="--no-isolation"):
         isolation.wrap_command(["entry"], None, True)
+
+
+def test_isolation_drops_kill_child_where_the_kernel_lacks_pidfd(monkeypatch):
+    # util-linux 2.39 implements --kill-child with pidfd_open, which a RHEL 8 kernel
+    # lacks; seen inside an Ubuntu 24.04 container on Sol.
+    def fake_run(argv, **kwargs):
+        return subprocess.CompletedProcess(argv, 1 if "--kill-child" in argv else 0)
+
+    monkeypatch.setattr(isolation.shutil, "which", lambda name: f"/usr/bin/{name}")
+    monkeypatch.setattr(isolation.subprocess, "run", fake_run)
+    isolation.isolation_prefix.cache_clear()
+    try:
+        prefix = isolation.isolation_prefix()
+        assert prefix is not None and "--kill-child" not in prefix
+        assert {"--user", "--net", "--pid", "--fork", "--mount-proc"} <= set(prefix)
+        assert isolation.isolation_available()
+    finally:
+        isolation.isolation_prefix.cache_clear()
 
 
 def test_verify_workers_leave_the_entry_its_cpus(monkeypatch):

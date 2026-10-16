@@ -30,15 +30,28 @@ class IsolationUnavailable(RuntimeError):
 
 
 @functools.cache
+def isolation_prefix() -> tuple[str, ...] | None:
+    """The namespace command that works on this host, or None if none does.
+
+    --kill-child ends an entry if the rig dies. util-linux 2.39 implements it with
+    pidfd_open, which older kernels (RHEL 8) lack, so it is dropped where it fails;
+    the PID namespace and the rig's process-group kill still end every process.
+    """
+    if shutil.which("unshare") is None:
+        return None
+    for prefix in (ISOLATE, tuple(a for a in ISOLATE if a != "--kill-child")):
+        try:
+            probe = subprocess.run([*prefix, "true"], capture_output=True, timeout=10)
+        except (OSError, subprocess.SubprocessError):
+            return None
+        if probe.returncode == 0:
+            return prefix
+    return None
+
+
 def isolation_available() -> bool:
     """Whether unprivileged user/net/pid/mount namespaces work on this host."""
-    if shutil.which("unshare") is None:
-        return False
-    try:
-        probe = subprocess.run([*ISOLATE, "true"], capture_output=True, timeout=10)
-    except (OSError, subprocess.SubprocessError):
-        return False
-    return probe.returncode == 0
+    return isolation_prefix() is not None
 
 
 def gpu_vendor() -> str:
@@ -127,10 +140,11 @@ def wrap_command(argv: list[str], cpus: tuple[int, ...] | None, isolate: bool) -
             raise RuntimeError("CPU pinning requested but taskset is not installed")
         argv = [taskset, "--cpu-list", ",".join(map(str, cpus)), *argv]
     if isolate:
-        if not isolation_available():
+        prefix = isolation_prefix()
+        if prefix is None:
             raise IsolationUnavailable(
                 "cannot create user/net/pid namespaces on this host (unprivileged user "
                 "namespaces disabled?). Rerun with --no-isolation to run entries without "
                 "network/process confinement; results record that choice.")
-        argv = [*ISOLATE, *argv]
+        argv = [*prefix, *argv]
     return argv
