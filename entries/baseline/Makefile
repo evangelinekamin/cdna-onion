@@ -13,6 +13,8 @@ DEFS      ?=
 SRC        = src/grind.cu
 DEPS       = $(wildcard src/*.cu src/*.cuh src/*.h)
 COMMON     = -O3 -std=c++17 $(DEFS)
+# std::thread needs libpthread named explicitly on glibc before 2.34 (RHEL 8 clusters).
+LDLIBS     = -lpthread
 
 .PHONY: all cuda hip resource-usage isa clean
 all: cuda
@@ -21,10 +23,10 @@ cuda: build/grind-cuda
 hip: build/grind-hip
 
 build/grind-cuda: $(DEPS) | build
-	$(NVCC) $(COMMON) -arch=$(CUDA_ARCH) -o $@ $(SRC)
+	$(NVCC) $(COMMON) -arch=$(CUDA_ARCH) -o $@ $(SRC) $(LDLIBS)
 
 build/grind-hip: $(DEPS) | build
-	$(HIPCC) $(COMMON) $(addprefix --offload-arch=,$(HIP_ARCHS)) -x hip -o $@ $(SRC)
+	$(HIPCC) $(COMMON) $(addprefix --offload-arch=,$(HIP_ARCHS)) -x hip -o $@ $(SRC) $(LDLIBS)
 
 resource-usage: | build
 	@for a in $(HIP_ARCHS); do \
