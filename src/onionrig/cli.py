@@ -5,6 +5,7 @@ An ENTRY is a command line, e.g. "./grind" or "python3 entries/python-ref/entry.
 
 import argparse
 import contextlib
+import json
 import os
 import shlex
 import signal
@@ -102,8 +103,13 @@ def cmd_check(args: argparse.Namespace) -> int:
         print(f"  {status}  {r.name:<16} {r.detail}", flush=True)
 
     print(f"conformance: {args.entry}")
-    ok = check_mod.passed(check_mod.run_checks(spec, Path(args.vectors), report=show))
+    checks = check_mod.run_checks(spec, Path(args.vectors), report=show)
+    ok = check_mod.passed(checks)
     print("conforms to onionrig-grind/1" if ok else "DOES NOT CONFORM")
+    if args.json:
+        Path(args.json).write_text(json.dumps(
+            {"entry": args.entry, "conforms": ok, "checks": [asdict(c) for c in checks]},
+            indent=1) + "\n")
     return 0 if ok else 1
 
 
@@ -258,6 +264,7 @@ def build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser("check", help="conformance suite for one entry")
     p.add_argument("entry")
     p.add_argument("--vectors", default="vectors")
+    p.add_argument("--json", metavar="PATH", help="also write the results as JSON to PATH")
     _entry_options(p)
     p.set_defaults(func=cmd_check)
 

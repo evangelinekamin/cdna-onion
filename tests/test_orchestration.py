@@ -46,10 +46,16 @@ def test_fresh_inputs_are_fresh():
 
 
 def test_reference_entry_conforms(capsys, tmp_path):
-    flags = ["--out", str(tmp_path), *([] if ISOLATED else ["--no-isolation"])]
+    report = tmp_path / "check.json"
+    flags = ["--out", str(tmp_path), "--json", str(report),
+             *([] if ISOLATED else ["--no-isolation"])]
     assert cli.main(["check", REF, *flags]) == 0
     out = capsys.readouterr().out
     assert "conforms" in out and "FAIL" not in out and out.count("PASS") == 7
+    # The same verdict, machine-readable, for the arena's judge.
+    data = json.loads(report.read_text())
+    assert data["conforms"] is True and len(data["checks"]) == 7
+    assert all(c["ok"] for c in data["checks"]) and data["checks"][0]["name"] == "info"
 
 
 def test_cheating_entry_fails_conformance():
