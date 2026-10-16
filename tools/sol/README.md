@@ -17,9 +17,15 @@ job takes about 15 minutes of GPU time.
 
 ## One-time setup on a Sol login node
 
-    git clone https://github.com/evangelinekamin/onionrig.git && cd onionrig
-    curl -LsSf https://astral.sh/uv/install.sh | sh             # user-local, no root
-    uv sync                                                     # Python env + pynacl
+    git clone https://github.com/evangelinekamin/onionrig.git ~/onionrig && cd ~/onionrig
+    tools/sol/setup.sh
+
+`setup.sh` puts a pinned, checksum-verified uv, a uv-managed Python, and the
+locked environment inside the repo (`.uv/`, `.venv/`), then checks the vectors.
+No shell startup file changes, so `rm -rf ~/onionrig` removes every trace. The
+job picks up the repo-local uv by itself; for commands by hand, first run
+`. tools/sol/env.sh`. Cluster home and scratch storage are not archives: copy
+`results/` somewhere permanent after each run.
 
 The repo is private, so `git clone` asks for a username and password: give your
 GitHub username and a fine-grained personal access token limited to this one
@@ -32,9 +38,10 @@ repository with read-only Contents access (GitHub > Settings > Developer setting
    gives a node to one user at a time, so nothing else shares it during the run.
 2. Follow progress with `tail -f results/mi210-<jobid>/progress.log`.
 
-If the job ends at once, its Slurm log `onionrig-<jobid>.log` says why. When
-`module load rocm` fails, the log lists the ROCm modules Sol has; pick one and
-resubmit with `sbatch --export=ALL,ROCM_MODULE=<name> tools/sol/mi210-bench.sbatch`.
+If the job ends at once, its Slurm log `onionrig-<jobid>.log` says why. sg250
+has ROCm installed system-wide (no module needed). On a node without `hipcc`,
+the job loads a `rocm` module; if that fails, the log lists the ROCm modules on
+offer, and you resubmit with `sbatch --export=ALL,ROCM_MODULE=<name> ...`.
 
 On a node you already hold, interactively or on the MI355X box, skip Slurm:
 

@@ -14,6 +14,9 @@ OUT=$(realpath -m "${1:-$ROOT/results/$(date +%Y%m%dT%H%M%S)}")
 SECONDS_PER_RUN=${2:-60}
 mkdir -p "$OUT"
 log() { printf '[%s] %s\n' "$(date +%H:%M:%S)" "$*" | tee -a "$OUT/progress.log"; }
+# The repo-local uv from tools/sol/setup.sh, if that is how this checkout was set up.
+# shellcheck source=env.sh
+if [ -x "$ROOT/.uv/bin/uv" ]; then . "$ROOT/tools/sol/env.sh"; fi
 rig() { uv run --project "$ROOT" onionrig "$@"; }
 command -v uv >/dev/null || { echo "install uv first: https://docs.astral.sh/uv/" >&2; exit 1; }
 
