@@ -39,9 +39,6 @@ fetch $ISA/amd-instinct-cdna5-instruction-set-architecture.pdf \
     5fae9822405c04f3e380c38d55b27df5b19469b78d5dfdd87c319a712f0239a8 || status=1
 fetch $WP/amd-cdna2-white-paper.pdf \
     62125a4a3f00e653556ca98c178712496b241e5c3d8a4edadee7578944c2cc6d || status=1
-
-# No stable public URL was found for this one; get it from AMD's Instinct pages.
-CDNA5_WP=2381d60185f79989d3d5e4260c86f72504fcab256b40bb85fe4a6dd782afb3ef
-if [ -f "$DOCS/amd-cdna5-whitepaper.pdf" ]; then check "$DOCS/amd-cdna5-whitepaper.pdf" "$CDNA5_WP"
-else echo "MANUAL   amd-cdna5-whitepaper.pdf: download the CDNA 5 white paper from amd.com into docs/ (cited edition sha256 $CDNA5_WP)"; fi
+fetch products/technologies/cdna/amd-cdna5-whitepaper.pdf \
+    2381d60185f79989d3d5e4260c86f72504fcab256b40bb85fe4a6dd782afb3ef || status=1
 exit $status
