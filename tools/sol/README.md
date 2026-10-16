@@ -17,9 +17,13 @@ job takes about 15 minutes of GPU time.
 
 ## One-time setup on a Sol login node
 
-    git clone <this repo> vanitydotonion && cd vanitydotonion   # or rsync it over
+    git clone https://github.com/evangelinekamin/onionrig.git && cd onionrig
     curl -LsSf https://astral.sh/uv/install.sh | sh             # user-local, no root
     uv sync                                                     # Python env + pynacl
+
+The repo is private, so `git clone` asks for a username and password: give your
+GitHub username and a fine-grained personal access token limited to this one
+repository with read-only Contents access (GitHub > Settings > Developer settings).
 
 ## Run
 

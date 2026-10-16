@@ -1,4 +1,4 @@
-# vanitydotonion - Architecture & Layout
+# onionrig - Architecture & Layout
 
 A portable, high-throughput Tor v3 vanity `.onion` generator targeting AMD CDNA
 (HIP), built so that multiple independent kernel implementations can be measured
@@ -107,7 +107,7 @@ is "shared" in that the harness and vectors treat it as a black-box generator.
 processes, statistics, and verification and never touches the hot loop. Entries
 are whatever their authors choose; the baseline is CUDA + HIP from one source.
 ```
-vanitydotonion/
+onionrig/
   src/onionrig/        # the rig: reference ed25519, vectors, protocol, verify, score, CLI
   entries/python-ref/  # the contract as a slow, exact reference entry
   entries/baseline/    # onion-gpu ported to the contract (calibration floor)

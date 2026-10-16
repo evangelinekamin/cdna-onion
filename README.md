@@ -1,4 +1,4 @@
-# vanitydotonion
+# onionrig
 
 How fast can a correct Tor v3 vanity-address generator run on AMD Instinct
 (CDNA) GPUs? This repo is the measuring stick. It contains:
