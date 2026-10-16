@@ -247,7 +247,8 @@ def cmd_arena_serve(args: argparse.Namespace) -> int:
     quota = arena_model.Quota(bench_per_window=args.bench_quota)
     r = arena_runner.Runner(boxes, arena_runner.SshSol(args.sol), Path(args.data), quota,
                             notify=_arena_event)
-    print(f"arena: boxes {', '.join(boxes)}; judging on {args.sol}; ledger {r.ledger.path}")
+    print(f"arena: boxes {', '.join(boxes)}; judging on {args.sol}; ledger {r.ledger.path}",
+          flush=True)
     try:
         r.serve(args.interval)
     except KeyboardInterrupt:
