@@ -1,0 +1,181 @@
+#!/usr/bin/env python3
+"""Send your entry to the arena's MI210 and wait for the verdict.
+
+  submit check [DIR]   build DIR and run the conformance suite (about a minute)
+  submit bench [DIR]   build DIR and run the official benchmark (about five minutes)
+  submit status [ID]   your recent submissions, or one result in full
+  submit quota         benchmarks left in the rolling 24 hours
+
+DIR defaults to ~/onionrig/entries/mine. The judge runs `make entry GPU_ARCH=gfx90a`
+in a copy of DIR (offline, in a container), then runs ./entry under the rig.
+Builds come from source only: build/, .git/, object files, and ./entry are left out.
+"""
+
+import json
+import os
+import secrets
+import sys
+import tarfile
+import time
+from pathlib import Path
+
+ARENA = Path.home() / "arena"
+OUTBOX, INBOX = ARENA / "outbox", ARENA / "inbox"
+DEFAULT_DIR = Path.home() / "onionrig" / "entries" / "mine"
+MAX_BYTES = 20 * 1024 * 1024
+SKIP_DIRS = {"build", ".git", "__pycache__", "out", ".venv"}
+SKIP_SUFFIXES = (".o", ".a", ".so", ".pyc")
+
+
+def fail(message: str) -> None:
+    sys.exit(f"submit: {message}")
+
+
+def keep(info: tarfile.TarInfo) -> tarfile.TarInfo | None:
+    parts = Path(info.name).parts
+    if any(p in SKIP_DIRS for p in parts) or info.name.endswith(SKIP_SUFFIXES):
+        return None
+    if parts == (".", "entry") or parts == ("entry",):
+        return None
+    info.uid = info.gid = 0
+    info.uname = info.gname = ""
+    return info
+
+
+def pack(src: Path, dest: Path) -> int:
+    tmp = dest.with_name("." + dest.name + ".tmp")
+    with tarfile.open(tmp, "w:gz") as tar:
+        tar.add(src, arcname=".", filter=keep)
+    size = tmp.stat().st_size
+    if size > MAX_BYTES:
+        tmp.unlink()
+        fail(f"{size >> 20} MB packed; the limit is {MAX_BYTES >> 20} MB (sources only, please)")
+    tmp.rename(dest)
+    return size
+
+
+def write_json(path: Path, record: dict) -> None:
+    tmp = path.with_name("." + path.name + ".tmp")
+    tmp.write_text(json.dumps(record))
+    tmp.rename(path)
+
+
+def human_rate(rate: float) -> str:
+    return f"{rate / 1e9:.3f} G/s" if rate >= 1e9 else f"{rate / 1e6:.1f} M/s"
+
+
+def show(result: dict) -> None:
+    status = str(result.get("status", "error")).upper()
+    print(f"== {result.get('kind')} {result.get('id')}: {status}")
+    if result.get("reason"):
+        print(f"   {result['reason']}")
+    build = result.get("build") or {}
+    if build:
+        seconds = build.get("seconds")
+        print(f"build: {'ok' if build.get('ok') else 'FAILED'}"
+              + (f" ({seconds:.0f} s)" if isinstance(seconds, int | float) else ""))
+        if not build.get("ok") and build.get("log"):
+            print(build["log"])
+    for c in (result.get("check") or {}).get("checks", []):
+        mark = "PASS" if c.get("ok") else ("FAIL" if c.get("required") else "WARN")
+        print(f"  {mark}  {c.get('name', ''):<16} {c.get('detail') or ''}")
+    bench = result.get("bench") or {}
+    if bench.get("rate"):
+        ci = bench.get("rate_ci")
+        ci_text = f" (95% CI {human_rate(ci[0])} - {human_rate(ci[1])})" if ci else ""
+        print(f"bench: {human_rate(bench['rate'])}{ci_text}, {bench.get('runs')} runs, "
+              f"on {bench.get('gpu')}")
+    if result.get("status") != "passed" and result.get("entry_log"):
+        print("entry stderr (last lines):")
+        print(result["entry_log"])
+
+
+def wait(sid: str) -> int:
+    print(f"submitted {sid}; waiting (Ctrl-C to stop waiting; `submit status {sid}` later)")
+    last = None
+    try:
+        while not (INBOX / f"{sid}.json").exists():
+            status_file = INBOX / f"{sid}.status"
+            status = status_file.read_text().strip() if status_file.exists() else "waiting for the runner"
+            if status != last:
+                print(f"  {time.strftime('%H:%M:%S')} {status}", flush=True)
+                last = status
+            time.sleep(5)
+    except KeyboardInterrupt:
+        print(f"\nstill pending; `submit status {sid}` shows it later")
+        return 130
+    result = json.loads((INBOX / f"{sid}.json").read_text())
+    show(result)
+    return 0 if result.get("status") == "passed" else 1
+
+
+def submit(kind: str, directory: str | None) -> int:
+    src = Path(directory).expanduser() if directory else DEFAULT_DIR
+    if not (src / "Makefile").is_file():
+        fail(f"{src} has no Makefile; the judge runs `make entry GPU_ARCH=gfx90a` there")
+    if "entry:" not in (src / "Makefile").read_text(errors="replace"):
+        print("submit: warning: no `entry:` target found in the Makefile", file=sys.stderr)
+    OUTBOX.mkdir(parents=True, exist_ok=True)
+    INBOX.mkdir(parents=True, exist_ok=True)
+    sid = f"{time.strftime('%Y%m%dT%H%M%S', time.gmtime())}-{kind}-{secrets.token_hex(3)}"
+    size = pack(src, OUTBOX / f"{sid}.tar.gz")
+    write_json(OUTBOX / f"{sid}.json", {"id": sid, "kind": kind, "created": time.time(),
+                                         "dir": str(src), "bytes": size})
+    return wait(sid)
+
+
+def status(sid: str | None) -> int:
+    if sid:
+        path = INBOX / f"{sid}.json"
+        if path.exists():
+            show(json.loads(path.read_text()))
+            return 0
+        state = INBOX / f"{sid}.status"
+        print(state.read_text().strip() if state.exists() else f"{sid}: waiting for the runner")
+        return 0
+    results = sorted(p for p in INBOX.glob("*.json") if p.name != "quota.json") if INBOX.exists() else []
+    for path in results[-15:]:
+        r = json.loads(path.read_text())
+        rate = (r.get("bench") or {}).get("rate")
+        print(f"{r.get('id')}  {r.get('kind'):<5}  {r.get('status'):<8}"
+              + (f"  {human_rate(rate)}" if rate else ""))
+    pending = sorted(p.stem for p in (ARENA / "sent").glob("*.json")) if (ARENA / "sent").exists() else []
+    pending += sorted(p.stem for p in OUTBOX.glob("*.json")) if OUTBOX.exists() else []
+    for p in pending:
+        if not (INBOX / f"{p}.json").exists():
+            print(f"{p}  pending")
+    return 0
+
+
+def quota() -> int:
+    path = INBOX / "quota.json"
+    if not path.exists():
+        print("no quota posted yet (the runner posts it on its next pass)")
+        return 0
+    q = json.loads(path.read_text())
+    line = f"{q.get('bench_left')} of {q.get('bench_per_window')} benchmarks left " \
+           f"in the rolling {q.get('window_hours'):g} hours"
+    if q.get("next_bench_at"):
+        line += f"; next slot at {time.strftime('%H:%M UTC', time.gmtime(q['next_bench_at']))}"
+    print(line + "; checks are unlimited")
+    return 0
+
+
+def main(argv: list[str]) -> int:
+    if not argv or argv[0] in ("-h", "--help", "help"):
+        print(__doc__.strip())
+        return 0
+    command, rest = argv[0], argv[1:]
+    if command in ("check", "bench") and len(rest) <= 1:
+        return submit(command, rest[0] if rest else None)
+    if command == "status" and len(rest) <= 1:
+        return status(rest[0] if rest else None)
+    if command == "quota" and not rest:
+        return quota()
+    print(__doc__.strip(), file=sys.stderr)
+    return 2
+
+
+if __name__ == "__main__":
+    os.umask(0o077)
+    sys.exit(main(sys.argv[1:]))

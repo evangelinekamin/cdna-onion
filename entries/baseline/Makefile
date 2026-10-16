@@ -3,12 +3,14 @@
 #   make hip             AMD build (HIP_ARCHS="gfx90a gfx950" by default)
 #   make resource-usage  per-kernel VGPRs / scratch / occupancy for each AMD arch
 #   make isa             AMD assembly for each arch, for reading the hot loop
+#   make entry           the arena's build: ./entry for GPU_ARCH (gfx90a by default)
 # Tuning knobs are preprocessor defines, e.g. make cuda DEFS="-DBINV_N=256".
 
 NVCC      ?= $(firstword $(wildcard /usr/local/cuda/bin/nvcc /usr/local/cuda-*/bin/nvcc) nvcc)
 HIPCC     ?= hipcc
 CUDA_ARCH ?= native
 HIP_ARCHS ?= gfx90a gfx950
+GPU_ARCH  ?= gfx90a
 DEFS      ?=
 SRC        = src/grind.cu
 DEPS       = $(wildcard src/*.cu src/*.cuh src/*.h)
@@ -24,6 +26,10 @@ hip: build/grind-hip
 
 build/grind-cuda: $(DEPS) | build
 	$(NVCC) $(COMMON) -arch=$(CUDA_ARCH) -o $@ $(SRC) $(LDLIBS)
+
+# The arena's judge runs `make entry GPU_ARCH=...` and then ./entry.
+entry: $(DEPS)
+	$(HIPCC) $(COMMON) --offload-arch=$(GPU_ARCH) -x hip -o $@ $(SRC) $(LDLIBS)
 
 build/grind-hip: $(DEPS) | build
 	$(HIPCC) $(COMMON) $(addprefix --offload-arch=,$(HIP_ARCHS)) -x hip -o $@ $(SRC) $(LDLIBS)
@@ -46,4 +52,4 @@ build:
 	mkdir -p build
 
 clean:
-	rm -rf build
+	rm -rf build entry

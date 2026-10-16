@@ -16,6 +16,9 @@ AMD_DOCS=(instinct-mi200-cdna2-instruction-set-architecture amd-instinct-cdna4-i
 
 echo "== provisioning $HOST"
 ssh "root@$HOST" 'bash -s' < "$ROOT/tools/arena/provision.sh"
+# The submit command lives outside the agent's repo, owned by root.
+ssh "root@$HOST" 'cat > /usr/local/bin/submit && chmod 755 /usr/local/bin/submit' \
+    < "$ROOT/tools/arena/submit"
 
 echo "== workspace"
 if ssh "agent@$HOST" 'test -e ~/onionrig'; then

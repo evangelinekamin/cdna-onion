@@ -226,6 +226,51 @@ def _follow(backend: tm.Telemetry, out: results.JsonlWriter, interval: float,
         time.sleep(max(0.0, interval - (time.monotonic() - started)))
 
 
+def _arena_event(e: dict) -> None:
+    extra = {"rejected": e.get("reason"), "queued": e.get("kind"),
+             "launched": f"job {e.get('job')}", "finished": e.get("status")}.get(e["event"], "")
+    if e["event"] == "finished" and isinstance(e.get("rate"), int | float):
+        extra = f"{extra} {results.human_rate(e['rate'])}"
+    stamp = time.strftime("%H:%M:%S", time.localtime(e["time"]))
+    print(f"{stamp} {e['box']:<9} {e['event']:<9} {e['id']} {sanitize(extra or '')}", flush=True)
+
+
+def cmd_arena_serve(args: argparse.Namespace) -> int:
+    from .arena import model as arena_model
+    from .arena import runner as arena_runner
+    boxes: dict[str, arena_runner.BoxLink] = {}
+    for spec in args.box:
+        name, _, host = spec.partition("=")
+        if not name or not host:
+            raise SystemExit(f"--box wants NAME=SSH_HOST, got {spec!r}")
+        boxes[name] = arena_runner.SshBox(host)
+    quota = arena_model.Quota(bench_per_window=args.bench_quota)
+    r = arena_runner.Runner(boxes, arena_runner.SshSol(args.sol), Path(args.data), quota,
+                            notify=_arena_event)
+    print(f"arena: boxes {', '.join(boxes)}; judging on {args.sol}; ledger {r.ledger.path}")
+    try:
+        r.serve(args.interval)
+    except KeyboardInterrupt:
+        print("arena: stopped; a restart picks up from the ledger")
+    return 0
+
+
+def cmd_arena_status(args: argparse.Namespace) -> int:
+    from .arena import model as arena_model
+    from .arena import runner as arena_runner
+    path = Path(args.data) / "ledger.jsonl"
+    events = results.read_jsonl([path]) if path.exists() else []
+    summary = arena_runner.summarize_ledger(
+        events, time.time(), arena_model.Quota(bench_per_window=args.bench_quota))
+    print(f"{'box':<10}{'sent':>5}{'pass':>5}{'fail':>5}{'rej':>5}{'pend':>5}{'bench left':>11}"
+          f"  best rate     running")
+    for box, s in sorted(summary.items()):
+        best = results.human_rate(s["best_rate"]) if s["best_rate"] else "-"
+        print(f"{box:<10}{s['submitted']:>5}{s['passed']:>5}{s['failed']:>5}{s['rejected']:>5}"
+              f"{s['pending']:>5}{s['bench_left']:>11}  {best:<13} {s['running'] or ''}")
+    return 0
+
+
 def _entry_options(p: argparse.ArgumentParser) -> None:
     p.add_argument("--device", type=_device, default=0,
                    help="GPU index among those visible to the rig (default 0)")
@@ -310,6 +355,19 @@ def build_parser() -> argparse.ArgumentParser:
                    help="the hit's address (from search.jsonl): the key must reproduce it")
     p.add_argument("--out", required=True, help="new HiddenServiceDir to create")
     p.set_defaults(func=cmd_combine)
+
+    p = sub.add_parser("arena", help="the competition's submission runner (organizer only)")
+    arena = p.add_subparsers(dest="arena_command", required=True)
+    serve = arena.add_parser("serve", help="collect, judge on the cluster, deliver; loops")
+    serve.add_argument("--box", action="append", required=True, metavar="NAME=SSH_HOST",
+                       help="a competitor box, e.g. claude=agent@arena-claude (repeat)")
+    serve.add_argument("--sol", default="sol", help="SSH host of the cluster login node")
+    serve.add_argument("--interval", type=float, default=15.0, help="seconds between passes")
+    for q in (serve, arena.add_parser("status", help="per-box summary from the ledger")):
+        q.add_argument("--data", default="arena-data", help="ledger and archive directory")
+        q.add_argument("--bench-quota", type=int, default=6, help="benchmarks per box per 24 h")
+    serve.set_defaults(func=cmd_arena_serve)
+    arena.choices["status"].set_defaults(func=cmd_arena_status)
 
     p = sub.add_parser("telemetry", help="probe GPU telemetry (validate on new hardware)")
     p.add_argument("--device", type=_device, default=0)
