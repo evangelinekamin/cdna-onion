@@ -14,8 +14,13 @@
 #SBATCH --partition=fpga
 #SBATCH --qos=public
 #SBATCH --gres=gpu:mi200:1
-#SBATCH --cpus-per-task=16
-#SBATCH --mem=32G
+#
+# Sized from seff on the first run (4 minutes, about 1.1 cores busy, 330 MB peak;
+# the HIP compile peaks at 220 MB): the GPU does the work. Four cores give the
+# entry its two pinned cores and hit verification the other two. The hour covers
+# the worst case, ten benchmark runs each after a full cool-down (about 42 min).
+#SBATCH --cpus-per-task=4
+#SBATCH --mem=2G
 #SBATCH --time=01:00:00
 #SBATCH --output=onionrig-%j.log
 
@@ -26,4 +31,17 @@ if ! command -v hipcc >/dev/null; then
 fi
 set -u
 cd "${SLURM_SUBMIT_DIR}"
-exec tools/sol/run-all.sh "results/mi210-${SLURM_JOB_ID}" 60
+OUT="results/mi210-${SLURM_JOB_ID}"
+mkdir -p "$OUT"
+
+# The work runs as job step 0, so its CPU and memory accounting is final once the
+# step ends; seff on a job that is still running reads nothing for its batch step.
+status=0
+srun --cpus-per-task="$SLURM_CPUS_PER_TASK" tools/sol/run-all.sh "$OUT" 60 || status=$?
+for _ in $(seq 12); do  # the step's record reaches the accounting database within seconds
+    sacct -n -j "${SLURM_JOB_ID}.0" -o State 2>/dev/null \
+        | grep -qE 'COMPLETED|FAILED|CANCELLED|TIMEOUT|OUT_OF_MEMORY|NODE_FAIL' && break
+    sleep 5
+done
+seff "$SLURM_JOB_ID" > "$OUT/seff.txt" 2>&1 || true
+exit "$status"

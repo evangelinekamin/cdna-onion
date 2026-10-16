@@ -57,10 +57,19 @@ if [ "$BACKEND" = hip ]; then
 fi
 ENTRY="$ROOT/entries/baseline/build/grind-$BACKEND"
 
-log "microbenchmarks"
+log "microbenchmarks, with telemetry sampled alongside"
+# Power and clock samples, lined up with each test by time (t_start/t_end), show
+# whether a primitive runs below peak because the card clocks down. setsid makes
+# the sampler a process group, so stopping it stops uv's child too.
+setsid uv run --project "$ROOT" onionrig telemetry --follow "$OUT/microbench-telemetry.jsonl" \
+    > "$OUT/microbench-telemetry.err" 2>&1 &
+SAMPLER=$!
+# 30 samples of ~150 ms per test: several telemetry readings land inside each one.
 # A failure here should not cost the conformance and benchmark data that follow.
-"$ROOT/tools/microbench/build/microbench-$BACKEND" 2> "$OUT/microbench.err" | tee "$OUT/microbench.jsonl" \
-    || log "microbenchmarks failed; see microbench.err"
+"$ROOT/tools/microbench/build/microbench-$BACKEND" 30 150 2> "$OUT/microbench.err" \
+    | tee "$OUT/microbench.jsonl" || log "microbenchmarks failed; see microbench.err"
+kill -TERM -- "-$SAMPLER" 2>/dev/null || true
+wait "$SAMPLER" 2>/dev/null || true
 
 log "telemetry probe"
 rig telemetry > "$OUT/telemetry-probe.txt" 2>&1 || log "no telemetry backend (see telemetry-probe.txt)"
