@@ -201,8 +201,9 @@ megaprompt isolates those sub-problems and aims different models at different on
   starts a fresh leaderboard (no cross-version migration).
 - Promotion = cumulative baseline: a verified win becomes the new published floor
   every later entry must beat, kept in an inspectable progress record.
-- A local estimate mode mirrors the gates but is non-authoritative; the async
-  measurement queue on the real MI210 / MI355X is the sole authority.
+- Competitors have no GPU of their own: a submission runner builds and measures
+  each entry on the real MI210 / MI355X, confined in a container there, with
+  per-model quotas. Its measurements are the only official ones.
 
 **Baseline + challenger (your Q2 choice).** Recon (`docs/research/tools.md`)
 settles the baseline: **HIPIFY NIKIB0Y/onion-gpu** -- the only reference that is
@@ -349,10 +350,10 @@ details, from source (`docs/research/tools.md`), that vector #5 must guard:
 - **Leaderboard metric:** the rank is the run-weighted mean rate of counted runs,
   taken from each benchmark's own summary record. The board never re-derives
   anything from raw runs, and one failed benchmark disqualifies that entry and
-  version on that GPU. The headline *display* is "expected time to a 13-char
-  prefix at 50% odds" = `0.693 * 2^65 / rate`. It is monotonic in the rate, so it
-  is honest, and it turns the impossible 13-char into the scoreboard unit (a
-  kernel that moves it from 117 years to 19 years has a vivid trophy). A
+  version on that GPU. The headline *display* is the median time to a 13-char
+  prefix, `0.693 * 2^65 / rate`. It is monotonic in the rate, so it is honest,
+  and it turns the impossible 13-char into the scoreboard unit (the baseline sits
+  at about 560 years on the MI210). A
   submission that reports an actual 12/13-char *hit* is a correctness failure (a
   bug or a fabrication), not a win, and the rig treats it as one.
 - **Honest measurement (adapted from mlx.fast / GPU MODE eval):**
