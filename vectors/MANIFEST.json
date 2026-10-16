@@ -1,0 +1,20 @@
+{
+ "schema": "onionrig-vectors/1",
+ "seed": 8029471112963451239,
+ "sha256": {
+  "field.json": "70792f2db458154a2fef7bd7844f81638bad774f32613ca875cbee5c2dfdaf58",
+  "field.txt": "8c10622e3fbfcd40c37b8bd3f61e6d962dd2d8d85bbf58e49dc01e4f96decd9d",
+  "point.json": "8d9d0086a219bc87dd0aeeda6cbb2c9ea717922d412e2baaf62d1a0c4248a689",
+  "point.txt": "64e5dce00b2165d2bff5e10c4c69b11041068f3ae69642823b9491572aadce91",
+  "decode.json": "b2324d16930ed9d57c868465aac60228b647ed7d7a7117506756d1ea9c66a705",
+  "decode.txt": "2ef30bca992d5c6e2a8238757454a4aa3a33c657dd7c6cd63a51f8955fac90bb",
+  "chain.json": "2f51e32f1f32bece3e0a3b6fde538e31b7776f7da7d71cf597e4c8ea9471be57",
+  "chain.txt": "5b92b4e7acfd5da2d765e8de1180ed7764873ff7694dc79ce83dee2d4ee2f33a",
+  "offset.json": "37067d829f92b68da6fb8f92753cbad4b1f66322a8e926289b7feda74868f6c7",
+  "offset.txt": "e32d74297ea476876de7ec4f954bf5b0881403fe2da675623a9499be1723b9e4",
+  "onion.json": "c8c008ae4375cbb3adcc889a74c1dcbd9ca852ab5ef7b27c530fbeaca0207947",
+  "onion.txt": "46d1468abef5cc59b45c38513b61cfb4aaa2e95a79e6f2255e2e13e9e7c1ef11",
+  "grind.json": "55933a84db6da0664daed028fc7c4ab6ccd6f6b553f1c164c8d3fb71a6e7e6c6",
+  "grind.txt": "f17599f19b8e966511b21b1fb37560752dde26860002cbc14bd820209df49a77"
+ }
+}

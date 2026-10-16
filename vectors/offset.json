@@ -1,0 +1,126 @@
+{
+ "schema": "onionrig-vectors/1",
+ "file": "offset",
+ "cases": [
+  {
+   "op": "offset",
+   "a0": "de77b648b5d47b18a462fc66b6f0b2213c5e56d3282ce04c35c65214f5d67fd1",
+   "k": "0",
+   "out": "de77b648b5d47b18a462fc66b6f0b2213c5e56d3282ce04c35c65214f5d67fd1"
+  },
+  {
+   "op": "offset",
+   "a0": "de77b648b5d47b18a462fc66b6f0b2213c5e56d3282ce04c35c65214f5d67fd1",
+   "k": "1",
+   "out": "3f5bf4520f0675e58c2f993e871eb9d6806878ded2451214ba78fc11c37caadd"
+  },
+  {
+   "op": "offset",
+   "a0": "de77b648b5d47b18a462fc66b6f0b2213c5e56d3282ce04c35c65214f5d67fd1",
+   "k": "-1",
+   "out": "66604ccb55b4eb14cc00fa179117fb34550940f0310545cda120bb717d429cf8"
+  },
+  {
+   "op": "offset",
+   "a0": "de77b648b5d47b18a462fc66b6f0b2213c5e56d3282ce04c35c65214f5d67fd1",
+   "k": "2",
+   "out": "a838bd14ae647f446def0b0da12982d07b0fe85f0075fdf8b844b8301a03810b"
+  },
+  {
+   "op": "offset",
+   "a0": "de77b648b5d47b18a462fc66b6f0b2213c5e56d3282ce04c35c65214f5d67fd1",
+   "k": "-2",
+   "out": "a932b5076142d05fc418701ff57c36296c549a913b8f66e067935066b0283cb6"
+  },
+  {
+   "op": "offset",
+   "a0": "de77b648b5d47b18a462fc66b6f0b2213c5e56d3282ce04c35c65214f5d67fd1",
+   "k": "1000",
+   "out": "e5647d75729439d430461deaeedaf5ede319c0b5ae6251e5cf84d0dca6b0d844"
+  },
+  {
+   "op": "offset",
+   "a0": "de77b648b5d47b18a462fc66b6f0b2213c5e56d3282ce04c35c65214f5d67fd1",
+   "k": "-1000",
+   "out": "c36f2d4a24d091227cb3086684dd450d400b6b83b706e7ba6392928657c5e76a"
+  },
+  {
+   "op": "offset",
+   "a0": "de77b648b5d47b18a462fc66b6f0b2213c5e56d3282ce04c35c65214f5d67fd1",
+   "k": "4294967296",
+   "out": "e5607e591bd77a7de43554ed09f120152df2c8da84816532846b1cea8f524a2f"
+  },
+  {
+   "op": "offset",
+   "a0": "de77b648b5d47b18a462fc66b6f0b2213c5e56d3282ce04c35c65214f5d67fd1",
+   "k": "-4294967296",
+   "out": "aaf53a99a3e9e845c1bae7bc42e32ad470990f73df59b0ee3fa2af8b2350269c"
+  },
+  {
+   "op": "offset",
+   "a0": "de77b648b5d47b18a462fc66b6f0b2213c5e56d3282ce04c35c65214f5d67fd1",
+   "k": "1125899906842631",
+   "out": "101ca28352ac6d76b8a5b4320c0ff8817109f08a363bd8630ec1dd02e804ff7e"
+  },
+  {
+   "op": "offset",
+   "a0": "de77b648b5d47b18a462fc66b6f0b2213c5e56d3282ce04c35c65214f5d67fd1",
+   "k": "-1125899906842631",
+   "out": "8cc2f35084cbda892e3c9af531e82cd62d74c94b6488ca3edfb324a3726630e5"
+  },
+  {
+   "op": "offset",
+   "a0": "de77b648b5d47b18a462fc66b6f0b2213c5e56d3282ce04c35c65214f5d67fd1",
+   "k": "-143634155196393",
+   "out": "3f8f4e5587dee9bfb486d02ce9680ac288addbf57feca3f48b84b206ed7f55f2"
+  },
+  {
+   "op": "offset",
+   "a0": "de77b648b5d47b18a462fc66b6f0b2213c5e56d3282ce04c35c65214f5d67fd1",
+   "k": "278886623262295",
+   "out": "bc604118bc4f62a2fb723eb1a94a97815d8a366e86d5c0aa35cffe48847ec761"
+  },
+  {
+   "op": "offset",
+   "a0": "de77b648b5d47b18a462fc66b6f0b2213c5e56d3282ce04c35c65214f5d67fd1",
+   "k": "4778994781059",
+   "out": "68b600958db5edac654bfb44fa0350ada06e88e0131d2deb15ff0807d71411ac"
+  },
+  {
+   "op": "offset",
+   "a0": "de77b648b5d47b18a462fc66b6f0b2213c5e56d3282ce04c35c65214f5d67fd1",
+   "k": "-10483696396243",
+   "out": "2be1005bb0e52acaf1ca41f7ee057e57e6c1ebdd36930f9045131540d8925448"
+  },
+  {
+   "op": "offset",
+   "a0": "de77b648b5d47b18a462fc66b6f0b2213c5e56d3282ce04c35c65214f5d67fd1",
+   "k": "109083526499107",
+   "out": "206d6564cdfc5e4276cbf56ef5d2c82af730c7d12b6ead97bfa8148c8ec9d03c"
+  },
+  {
+   "op": "offset",
+   "a0": "de77b648b5d47b18a462fc66b6f0b2213c5e56d3282ce04c35c65214f5d67fd1",
+   "k": "128608066171112",
+   "out": "f005e8d1f65a7e0b7fec67503c471cd5c18d20ebf9d00a90ec72fdbf16b9f59b"
+  },
+  {
+   "op": "offset",
+   "a0": "de77b648b5d47b18a462fc66b6f0b2213c5e56d3282ce04c35c65214f5d67fd1",
+   "k": "231970550467990",
+   "out": "6f46b4cb6cf2272b96ba0b360953dd96b35a03a21938b714bc20ead0e4eb0f03"
+  },
+  {
+   "op": "offset",
+   "a0": "de77b648b5d47b18a462fc66b6f0b2213c5e56d3282ce04c35c65214f5d67fd1",
+   "k": "-145749706093230",
+   "out": "7b0cfbd5ef70c0ee8591edc187304a6bb07debaccf5235c41f557b7c0a9da2ec"
+  },
+  {
+   "op": "offset",
+   "a0": "de77b648b5d47b18a462fc66b6f0b2213c5e56d3282ce04c35c65214f5d67fd1",
+   "k": "-101729781152905",
+   "out": "494e08b8600a6e8659d0722a1f329411f295f0ee10ada1d8c5b817fd93a36dd4"
+  }
+ ]
+}
