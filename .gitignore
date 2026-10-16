@@ -1,0 +1,29 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.coverage
+htmlcov/
+.hypothesis/
+# Build outputs
+build/
+*.o
+*.s
+# Benchmark and search results (machine-specific, regenerate)
+bench/
+search/
+results/
+# Start scalars belong outside the repo entirely (keygen refuses this tree)
+keys/
+# Secrets: never commit start scalars or Tor secret keys
+*.secret
+**/hs_ed25519_secret_key
+*_hs_ed25519_secret_key
+# Windows download metadata
+*:Zone.Identifier
+# Third-party documents we may not redistribute (tools/fetch-amd-docs.sh gets AMD's)
+docs/*.pdf
+docs/*.html
+# Internal only: quotes all-rights-reserved kernel source, never distribute
+docs/research/gpumode-kernel-sources.md
