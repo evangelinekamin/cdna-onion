@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Sol MI210 benchmarking job: a short benchmarking run (about 15 minutes), not a search.
+# Sol MI210 benchmarking job: a short benchmarking run (about 5 minutes), not a search.
 #
 # Sol's MI210s are the two GPUs in node sg250. They live in the `fpga` partition,
 # which accepts only the `public` QoS and gives a node to one user at a time,

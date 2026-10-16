@@ -143,8 +143,9 @@ game, and the baseline is MIT):
   (VGPR/occupancy levers, branchless reduction, the rocprof-compute workflow).
 - `docs/*.pdf`: the AMD CDNA2/4/5 ISA references and whitepapers (if missing,
   `tools/fetch-amd-docs.sh` downloads them from AMD).
-- `entries/baseline/`: onion-gpu ported to the contract (your calibration floor),
-  with `make resource-usage` and `make isa` for AMD static analysis.
+- `entries/baseline/`: onion-gpu ported to the contract (your calibration floor:
+  1.45 G candidates/s measured on the MI210), with `make resource-usage` and
+  `make isa` for AMD static analysis.
 - `entries/python-ref/`: the contract as a readable reference entry.
 - `tools/microbench/`: sustained throughput of each primitive (`v_mad_u64_u32`,
   `v_fma_f64`, ...) on the actual GPU. Run it; datasheets do not give these.

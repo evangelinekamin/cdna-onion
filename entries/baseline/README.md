@@ -48,7 +48,7 @@ Without a local ROCm install, use the official image:
 ## Measured and static results
 
 **NVIDIA RTX 4060 Ti (sm_89, CUDA 13.4).** The rig's proof-of-work measurement
-gives about 918 M candidates/s. Upstream reports 917 M keys/s on an RTX 5060 for
+gives about 954 M candidates/s. Upstream reports 917 M keys/s on an RTX 5060 for
 the same kernel, so the port costs nothing.
 
 **AMD (static, from the ROCm 7.2.4 compiler).** `grind_kernel` resource usage:
@@ -67,3 +67,7 @@ multiply-add. On CDNA every 64-bit value costs two VGPRs, so the compiler uses a
 to hide the latency of the ~30 KB batch arrays in scratch. Register pressure and
 occupancy are the obvious first lever for any AMD entry, which matches the GPU
 MODE craft notes in `docs/research/gpumode-craft.md`.
+
+**AMD Instinct MI210 (Sol, ROCm 7.2.3), measured.** All seven conformance checks
+pass, and the rig measures 1.45 G candidates/s (95% CI 1.43 to 1.46), 1.52x the 4060 Ti despite the occupancy
+of 1. See `docs/design/CDNA-PERF-REFERENCE.md` section 8 for the thermals.

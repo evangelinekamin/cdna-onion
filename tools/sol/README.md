@@ -13,7 +13,7 @@ Results stream into one directory as they are produced.
 **Keep it a benchmarking study.** Short runs measured in candidates/s answer the
 research question. Long vanity searches for a personal address should not run on
 Sol (see the acceptable-use notes in `docs/design/ARCHITECTURE.md` sec 1). This
-job takes about 15 minutes of GPU time.
+job takes about 5 minutes of GPU time (4 on the MI210 in October 2026).
 
 ## One-time setup on a Sol login node
 

@@ -100,6 +100,10 @@ Do not loosen the permissions.
 - Rig, vectors, contract, reference entry, split-key tools: complete and tested.
 - Baseline: verified on an RTX 4060 Ti (about 954 M candidates/s, matching
   upstream's own figure). It compiles for gfx90a and gfx950, where the static
-  analysis shows occupancy of 1 wave/SIMD, the first lever for AMD entries.
-- Next: the first MI210 run (microbench + baseline), then the model competition
-  (`docs/design/MEGAPROMPT.md`).
+  analysis shows occupancy of 1 wave/SIMD, the first lever for AMD entries. On
+  Sol's MI210 it conforms and measures 1.45 G candidates/s (95% CI 1.43 to 1.46).
+- MI210 microbenchmarks: the 32x32+64 integer multiply-add runs at the FP64 FMA
+  rate, so FP64 has no VALU edge on that card (`docs/design/CDNA-PERF-REFERENCE.md`
+  section 8).
+- Next: the model competition (`docs/design/MEGAPROMPT.md`), and the same job on
+  an MI355X.

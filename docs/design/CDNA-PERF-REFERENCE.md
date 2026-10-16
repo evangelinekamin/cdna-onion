@@ -91,6 +91,18 @@ MI250X, so do not apply it to MI210):
 | MI300X | CDNA3 | 81.7 TF | 163.4 TF | 2x |
 | MI355X (scale box) | CDNA4 | 78.6 TF | 78.6 TF | **none** |
 
+**Measured on the MI210 (section 8): integer MAD runs at the FP64 FMA rate.**
+`v_mad_u64_u32` and `v_fma_f64` sustain 51.2 and 51.3 operations per CU per
+nominal clock, so the literature prior that CDNA's integer multiply is slow does
+not hold for gfx90a's VALU. An exact 52x52-bit FP64 limb product takes about
+three operations (two FMAs and a subtraction, the Dekker-style split), roughly
+900 bits² of product per operation, against 1,024 for one 32x32 multiply-add.
+At equal issue rates that leaves FP64 no edge on MI210's VALU, and integer
+arithmetic is exact without rounding analysis. FP64's remaining case on MI210 is
+the MFMA matrix units: a separate pipe at twice the vector rate, unproven for
+this workload. The bullets below are the pre-measurement reasoning, kept for
+the MI355X question, which is still open.
+
 - **MI210 (test box):** FP64 is first-class (22.6 TF vector, ~1:1 with FP32) and
   the matrix path **doubles** it -> the radix-2^51 FP64 multiply is a strong
   contender, and the FP64-matrix limb idea (sec below) is worth prototyping here.
@@ -212,16 +224,35 @@ nominal clock.
 
 | Primitive | RTX 4060 Ti (sm_89), reference | MI210 | MI355X |
 |---|---|---|---|
-| `v_mad_u64_u32` (32x32+64) | 31.8 | **TBD (run on Sol)** | TBD |
-| `v_mul_lo_u32` | 67.0 | TBD | TBD |
-| `v_mul_hi_u32` + add | 33.6 | TBD | TBD |
-| `v_fma_f64` | 1.78 (Ada consumer FP64 is 1/64 rate) | TBD (expect about 64, full rate) | TBD |
-| FP32 FMA (`v_pk_fma_f32` on CDNA) | 113.5 | TBD (expect about 128, packed) | TBD |
-| ref10 `fe_mul` | 0.166 (14.7 G/s) | TBD | TBD |
+| `v_mad_u64_u32` (32x32+64) | 31.8 | **51.2** | TBD |
+| `v_mul_lo_u32` | 67.0 | 55.5 | TBD |
+| `v_mul_hi_u32` + add | 33.6 | 27.9 | TBD |
+| `v_fma_f64` | 1.78 (Ada consumer FP64 is 1/64 rate) | **51.3** | TBD |
+| FP32 FMA (`v_pk_fma_f32` on CDNA) | 113.5 | 107.7 (packed) | TBD |
+| ref10 `fe_mul` | 0.166 (14.7 G/s) | 0.235 (41.5 G/s) | TBD |
+
+The MI210 column comes from Sol (node sg250, ROCm 7.2.3, 2026-10-16). Two
+independent runs, one of them inside the rig's namespace sandbox, agree within
+0.1%, and samples within a run within 0.1%.
 
 On the 4060 Ti, the baseline's hot loop runs at about 78% of the isolated
-`fe_mul` rate: field-multiply bound, as expected. The MI210 column decides the
-integer-vs-FP64 fork (section 4).
+`fe_mul` rate: field-multiply bound, as expected. On the MI210 the integer MAD
+and the FP64 FMA tie, which settles the VALU side of the fork for this card
+(section 4). Both land on exactly 51.2, four-fifths of the 64 lanes per CU per
+clock. That is either a five-cycle issue for these 64-bit three-operand
+instructions or a lower sustained clock under pure ALU load than the 1.65 GHz
+the grind runs at; the microbenchmark does not sample clocks, so this is open.
+
+### The baseline on the MI210 (Sol, measured)
+
+On the MI210 the baseline passes all seven conformance checks, inside the rig's
+namespace sandbox, and measures **1.45 G candidates/s (95% CI 1.43 to 1.46)**: three 60 s runs, each from a cooled
+start. That is 1.52x the RTX 4060 Ti, still at occupancy 1. During the runs the
+card drew about 255 W of its 300 W limit, held a mean 1.65 GHz, peaked at
+87 °C, and never throttled. The 10 s calibration run on the cool card measured
+1.54 G/s, so a short benchmark on a cool MI210 overstates sustained throughput by
+about 6%; this is why the rig times 60 s runs. At this rate one MI210 needs a
+median 6.2 days for a 10-character prefix.
 
 ### Benchmark methodology finding
 
