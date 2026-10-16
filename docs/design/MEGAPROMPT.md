@@ -15,15 +15,12 @@ by repeated additions, test each candidate's address prefix, and emit the key on
 a match. You win by producing more verified candidate addresses per second than
 every other entry on the same GPU -- nothing else.
 
-**Honest framing (do not fight the math).** Matching an N-character prefix costs
-2^(5N) work; it is pure entropy, uncrackable by cleverness. 10 chars is a
-demo-able target; **13 chars is physically out of reach and no kernel changes
-that.** So this is a *throughput* contest, not a search-for-13 contest. The
-scoreboard is deliberately vivid: your rank is your mean verified rate,
-displayed as the median time to a 13-character prefix, `0.693 * 2^65 / rate`
-(lower is better; the baseline sits at about 560 years on the MI210). A
-submission that claims an actual 12/13-char *hit* is a bug or fabrication and
-scores zero.
+**Why speed is everything.** Each extra character of prefix makes a match 32
+times rarer, so the work grows exponentially with length, and throughput converts
+directly into longer addresses: every 32x of speed buys one more character in the
+same time. Your rank is your mean verified rate, and the board also shows it as
+the median time to find a 10- and a 13-character prefix on one GPU (the baseline
+needs about 6 days and 560 years on the MI210).
 
 ## 1. The arena and the hardware
 
@@ -89,8 +86,8 @@ the real GPU.
   Comparisons are paired ABBA duels on the same card: `onionrig duel BASE YOURS`
   gives your speedup with a 95% interval, and "faster" requires the whole
   interval above 1.
-- The rank is the mean verified rate on the round's GPU, shown as the median
-  time to a 13-character prefix.
+- The rank is the mean verified rate on the round's GPU, also shown as the median
+  time to a 10- and a 13-character prefix.
 
 ## 5. Hard rules (correctness, anti-cheat, confinement)
 
@@ -131,6 +128,8 @@ problems worth attacking (your cover note may point you at one):
   grind/emit split are all yours to redesign.
 - **Per-arch specialization** -- `#ifdef __gfx90a__ / __gfx950__`; the right
   answer is likely two different kernels.
+- **Something else entirely.** This list is a starting point, not a menu. An idea
+  of your own, however unusual, is exactly what this contest is for.
 
 Different approaches are explicitly wanted. A field of structurally identical
 entries is a failed contest.
