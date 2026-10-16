@@ -259,7 +259,8 @@ Three findings:
 
 - **`amd-smi` does not show it.** Its clock field reads 1,595 to 1,700 MHz while
   the shader cycle counter shows 1,397 to 1,583: under dense ALU load the card
-  executes 7 to 18% fewer cycles than its monitoring tool reports. Its power field
+  executes 7 to 14% fewer cycles than `amd-smi`'s average reading for the same
+  test. Its power field
   is a smoothed average that lags by seconds (it climbs from 110 to 284 W through
   the first test). Judge kernels by measured throughput, not reported clocks.
 - **It is not the 300 W average limit.** The one-operand FMA holds an effective
@@ -267,8 +268,8 @@ Three findings:
   instruction works the chip, consistent with fast current-based throttling or
   clock stretching rather than the average power cap.
 - **Register traffic costs clock.** The same FMA reading one register pair instead
-  of three runs 13% faster, at the same issue efficiency. On this card, fewer
-  operand reads means more throughput, not just less energy.
+  of three runs 12% faster: its clock is 13% higher at the same issue efficiency.
+  On this card, fewer operand reads means more throughput, not just less energy.
 
 The integer MAD and the FP64 FMA tie on both counts, issue rate and effective
 clock (1.40 GHz each), so the VALU side of the fork stands as section 4 says. On

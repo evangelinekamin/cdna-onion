@@ -105,7 +105,7 @@ Do not loosen the permissions.
 - MI210 microbenchmarks: the 32x32+64 integer multiply-add runs at the FP64 FMA
   rate, so FP64 has no VALU edge on that card. Per effective clock every VALU
   instruction issues at about 97% of peak; under dense ALU load the card clocks
-  7 to 18% below what `amd-smi` reports (`docs/design/CDNA-PERF-REFERENCE.md`
+  7 to 14% below what `amd-smi` reports (`docs/design/CDNA-PERF-REFERENCE.md`
   section 8).
 - Next: the model competition (`docs/design/MEGAPROMPT.md`), and the same job on
   an MI355X.
