@@ -4,11 +4,14 @@ An ENTRY is a command line, e.g. "./grind" or "python3 entries/python-ref/entry.
 """
 
 import argparse
+import contextlib
 import os
 import shlex
 import signal
+import subprocess
 import sys
 import time
+from dataclasses import asdict
 from pathlib import Path
 
 from . import keys, onion, vectors
@@ -195,8 +198,26 @@ def cmd_telemetry(args: argparse.Namespace) -> int:
     if backend is None:
         print("no telemetry backend answered (tried amd-smi, nvidia-smi)")
         return 1
-    print(f"{backend.name}: {backend.sample()}")
+    if args.follow is None:
+        print(f"{backend.name}: {backend.sample()}")
+        return 0
+    _follow(backend, results.JsonlWriter(Path(args.follow)), args.interval, args.count)
     return 0
+
+
+def _follow(backend: tm.Telemetry, out: results.JsonlWriter, interval: float,
+            count: int | None) -> None:
+    """One JSON line per sample, stamped with epoch time to line up with other logs,
+    until `count` samples or the process is stopped. A failed sample is skipped."""
+    taken = 0
+    while count is None or taken < count:
+        started = time.monotonic()
+        with contextlib.suppress(OSError, ValueError, subprocess.SubprocessError):
+            sample = asdict(backend.sample())
+            del sample["t"]  # the sample's monotonic clock means nothing outside this process
+            out.write({"t": time.time(), **sample})
+        taken += 1
+        time.sleep(max(0.0, interval - (time.monotonic() - started)))
 
 
 def _entry_options(p: argparse.ArgumentParser) -> None:
@@ -285,6 +306,10 @@ def build_parser() -> argparse.ArgumentParser:
 
     p = sub.add_parser("telemetry", help="probe GPU telemetry (validate on new hardware)")
     p.add_argument("--device", type=_device, default=0)
+    p.add_argument("--follow", metavar="PATH",
+                   help="keep sampling, appending JSON lines to PATH until stopped")
+    p.add_argument("--interval", type=float, default=0.25, help="seconds between samples")
+    p.add_argument("--count", type=int, help="with --follow: stop after this many samples")
     p.set_defaults(func=cmd_telemetry)
     return parser
 

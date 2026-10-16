@@ -142,3 +142,30 @@ def test_assess():
 def test_detects_the_local_gpu():
     backend = tm.detect({}, 0)
     assert backend is not None and backend.sample().temp_c is not None
+
+
+def test_telemetry_follow_streams_epoch_stamped_samples(tmp_path, monkeypatch):
+    from onionrig import cli
+
+    class Fake:
+        name = "fake"
+
+        def sample(self):
+            return tm.Sample(123.0, 50.0, 200.0, 1650.0, False, False)
+
+    monkeypatch.setattr(tm, "detect", lambda env, device: Fake())
+    out = tmp_path / "telemetry.jsonl"
+    assert cli.main(["telemetry", "--follow", str(out), "--count", "3", "--interval", "0"]) == 0
+    rows = [json.loads(line) for line in out.read_text().splitlines()]
+    assert len(rows) == 3
+    assert (rows[0]["temp_c"], rows[0]["power_w"], rows[0]["sclk_mhz"]) == (50.0, 200.0, 1650.0)
+    # Epoch seconds (not the sample's monotonic clock), to line up with other logs.
+    assert all(r["t"] > 1.6e9 for r in rows) and rows[0]["t"] <= rows[-1]["t"]
+
+
+def test_telemetry_without_a_backend_fails(monkeypatch, capsys):
+    from onionrig import cli
+
+    monkeypatch.setattr(tm, "detect", lambda env, device: None)
+    assert cli.main(["telemetry"]) == 1
+    assert "no telemetry backend" in capsys.readouterr().out
