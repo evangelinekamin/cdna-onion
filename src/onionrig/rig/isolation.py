@@ -15,6 +15,7 @@ import shutil
 import subprocess
 from collections.abc import Mapping
 from pathlib import Path
+from typing import Literal
 
 ISOLATE = ("unshare", "--user", "--map-root-user", "--net", "--pid", "--fork",
            "--kill-child", "--mount-proc")
@@ -116,11 +117,23 @@ def scrubbed_environment(env: Mapping[str, str], home: Path) -> dict[str, str]:
 
 
 ENTRY_CPUS = 2  # CPUs an entry is pinned to by default
+AUTO_CPUS = "auto"  # EntrySpec.cpus: the entry's device's own default_cpus
 
 
-def default_cpus(count: int = ENTRY_CPUS) -> tuple[int, ...]:
-    """The first `count` CPUs this process may use (Slurm cpusets included)."""
-    return tuple(sorted(os.sched_getaffinity(0))[:count])
+def default_cpus(device: int = 0, count: int = ENTRY_CPUS) -> tuple[int, ...]:
+    """The CPUs the entry on `device` is pinned to by default: the device-th group
+    of `count` CPUs this process may use (Slurm cpusets included), so entries on
+    different GPUs of one host never share a CPU while there are enough of them.
+    With more GPUs than groups, the groups wrap around."""
+    allowed = sorted(os.sched_getaffinity(0))
+    take = min(count, len(allowed))
+    return tuple(allowed[(device * take + i) % len(allowed)] for i in range(take))
+
+
+def entry_cpus(cpus: tuple[int, ...] | Literal["auto"] | None,
+               device: int) -> tuple[int, ...] | None:
+    """The CPU list to pin the entry on `device` to (None: unpinned)."""
+    return default_cpus(device) if cpus == AUTO_CPUS else cpus
 
 
 def default_verify_workers(cap: int = 8) -> int:

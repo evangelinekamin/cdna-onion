@@ -113,7 +113,8 @@ On any failure, send `{"event": "error", "message": "..."}` and exit nonzero.
   host CPU or on remote machines is not allowed. By default the rig enforces
   this without root:
   - GPU visibility is narrowed to one device.
-  - The entry is pinned to the first 2 CPUs it may use.
+  - The entry is pinned to 2 of the CPUs the rig may use. Entries on different
+    GPUs of one host get different CPUs.
   - It runs in unprivileged user, network, PID, and mount namespaces: no network
     connections, and every process it starts (`setsid` escapees included) dies
     with it.

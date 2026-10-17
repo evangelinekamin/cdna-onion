@@ -24,7 +24,7 @@ from array import array
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import IO
+from typing import IO, Literal
 
 from . import isolation
 from . import protocol as proto
@@ -42,7 +42,7 @@ class EntrySpec:
     cwd: Path | None = None
     env: tuple[tuple[str, str], ...] = ()
     device: int = 0                     # index into the GPUs visible to the rig
-    cpus: tuple[int, ...] | None = None
+    cpus: tuple[int, ...] | Literal["auto"] | None = None  # AUTO_CPUS: per device
     isolate: bool = True
     log_dir: Path | None = None         # stderr logs; None discards them
 
@@ -109,7 +109,9 @@ class _Launch:
         env = isolation.scrubbed_environment(os.environ, self.home)
         env.update(spec.env)
         env, _ = isolation.select_gpu(env, spec.device, isolation.gpu_vendor())
-        argv = isolation.wrap_command([*spec.argv, *flags], spec.cpus, spec.isolate)
+        argv = isolation.wrap_command([*spec.argv, *flags],
+                                      isolation.entry_cpus(spec.cpus, spec.device),
+                                      spec.isolate)
         try:
             self.proc = subprocess.Popen(
                 argv, cwd=spec.cwd, env=env, start_new_session=True,

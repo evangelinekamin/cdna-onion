@@ -181,3 +181,9 @@ def test_committed_vectors_are_current():
 def test_parse_cpus():
     assert cli.parse_cpus("0-3,8") == (0, 1, 2, 3, 8)
     assert cli.parse_cpus("5") == (5,)
+
+
+def test_cpus_option():
+    assert cli._cpus("auto") == isolation.AUTO_CPUS  # resolved per GPU at launch
+    assert cli._cpus("all") is None
+    assert cli._cpus("2-3") == (2, 3)

@@ -118,6 +118,24 @@ def test_default_cpus_come_from_the_allowed_set():
     assert 1 <= len(cpus) <= 2 and set(cpus) <= set(isolation.os.sched_getaffinity(0))
 
 
+def test_each_gpu_gets_cpus_of_its_own(monkeypatch):
+    # Eight entries on one node pinned to the same two CPUs would fight over them.
+    monkeypatch.setattr(isolation.os, "sched_getaffinity", lambda pid: set(range(16)))
+    groups = [isolation.default_cpus(device) for device in range(8)]
+    assert groups[0] == (0, 1) and groups[7] == (14, 15)
+    assert len({cpu for group in groups for cpu in group}) == 16
+    assert isolation.default_cpus(8) == (0, 1)  # more GPUs than pairs: wrap around
+    monkeypatch.setattr(isolation.os, "sched_getaffinity", lambda pid: {5})
+    assert isolation.default_cpus(3) == (5,)
+
+
+def test_auto_cpus_resolve_per_device(monkeypatch):
+    monkeypatch.setattr(isolation.os, "sched_getaffinity", lambda pid: set(range(8)))
+    assert isolation.entry_cpus(isolation.AUTO_CPUS, 2) == (4, 5)
+    assert isolation.entry_cpus((3,), 2) == (3,)
+    assert isolation.entry_cpus(None, 2) is None
+
+
 @pytest.mark.integration
 @pytest.mark.skipif(not isolation.isolation_available(), reason="needs unprivileged namespaces")
 def test_isolated_processes_have_no_network():

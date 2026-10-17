@@ -66,6 +66,23 @@ def test_pinned_grind():
     assert runner.run_grind(spec, A0, ("ab",), 0.5, FAST).outcome == runner.DONE
 
 
+def test_auto_pinning_follows_the_device(monkeypatch):
+    # A search hands the same spec to every GPU; each entry still gets its own CPUs.
+    pinned = []
+
+    def wrap(argv, cpus, isolate):
+        pinned.append(cpus)
+        return argv
+
+    monkeypatch.setattr(isolation, "wrap_command", wrap)
+    monkeypatch.setattr(isolation.os, "sched_getaffinity", lambda pid: set(range(8)))
+    for device in (0, 3):
+        spec = runner.EntrySpec(REFERENCE.argv, device=device, cpus=isolation.AUTO_CPUS,
+                                isolate=False)
+        assert runner.run_info(spec).name
+    assert pinned == [(0, 1), (6, 7)]
+
+
 def test_open_ended_grind_stops_on_request():
     stop = threading.Event()
     threading.Timer(1.0, stop.set).start()

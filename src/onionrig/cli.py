@@ -14,6 +14,7 @@ import sys
 import time
 from dataclasses import asdict
 from pathlib import Path
+from typing import Literal
 
 from . import keys, onion, vectors
 from .rig import bench as bench_mod
@@ -33,11 +34,11 @@ def parse_cpus(text: str) -> tuple[int, ...]:
     return tuple(cpus)
 
 
-def _cpus(text: str) -> tuple[int, ...] | None:
-    """'auto' pins to the first 2 allowed CPUs, 'all' disables pinning."""
+def _cpus(text: str) -> tuple[int, ...] | Literal["auto"] | None:
+    """'auto' pins each GPU's entry to 2 allowed CPUs of its own, 'all' disables pinning."""
     if text == "all":
         return None
-    return isolation.default_cpus() if text == "auto" else parse_cpus(text)
+    return isolation.AUTO_CPUS if text == "auto" else parse_cpus(text)
 
 
 def _even_pairs(text: str) -> int:
@@ -276,8 +277,8 @@ def _entry_options(p: argparse.ArgumentParser) -> None:
     p.add_argument("--device", type=_device, default=0,
                    help="GPU index among those visible to the rig (default 0)")
     p.add_argument("--cpus", default="auto",
-                   help="pin the entry: 'auto' = first 2 allowed CPUs, 'all' = no pinning, "
-                        "or a list like 0-3")
+                   help="pin the entry: 'auto' = 2 allowed CPUs of its own per GPU, "
+                        "'all' = no pinning, or a list like 0-3")
     p.add_argument("--no-isolation", action="store_true",
                    help="run entries without network/PID namespaces (recorded in results)")
     p.add_argument("--out", default="bench", help="results directory (default: bench)")
