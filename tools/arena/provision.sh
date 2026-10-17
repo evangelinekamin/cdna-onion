@@ -87,6 +87,22 @@ printf 'PasswordAuthentication no\nKbdInteractiveAuthentication no\nPermitRootLo
 sshd -t
 systemctl reload ssh
 
+step "SSH: keep tmux reachable"
+# Agents clean /tmp (`rm -rf /tmp/*`), which deletes tmux's socket while their
+# session runs on, so `tmux new -A -s main` would start a second, empty server.
+# sshd runs /etc/ssh/sshrc at every login, before the shell or command.
+cat > /etc/ssh/sshrc <<'EOF'
+# Recreate this user's tmux socket if /tmp was wiped: SIGUSR1 makes the running
+# server rebind it (tmux(1)). Installed by onionrig's tools/arena/provision.sh.
+exec > /dev/null 2>&1
+dir=/tmp/tmux-$(id -u)
+if [ ! -S "$dir/default" ] && pid=$(pgrep -o -u "$(id -u)" -x 'tmux: server'); then
+    [ -d "$dir" ] || mkdir -m 700 "$dir"
+    kill -USR1 "$pid"
+    for _ in 1 2 3 4 5 6 7 8 9 10; do [ -S "$dir/default" ] && break; sleep 0.1; done
+fi
+EOF
+
 step "versions"
 echo "hipcc $(dpkg-query -W -f='${Version}' hipcc), node $(node --version), uv $(/usr/local/bin/uv --version | cut -d' ' -f2), python $(python3 --version | cut -d' ' -f2)"
 echo "provision: OK"
