@@ -22,8 +22,11 @@ echo "${names[@]}" > "$out/VARIANTS"
 cp "$here/run.sh" "$out/run.sh"
 cat > "$out/Makefile" <<'MK'
 GPU_ARCH ?= gfx90a
-entry:
-	for v in $$(cat VARIANTS); do $(MAKE) -C $$v entry GPU_ARCH=$(GPU_ARCH) DEFS="$$(cat $$v/DEFS)" || exit 1; done
+VARIANTS := $(shell cat VARIANTS)
+# One target per variant, so `make -j` builds them in parallel.
+entry: $(addsuffix /entry,$(VARIANTS))
 	cp run.sh entry && chmod +x entry
+%/entry:
+	$(MAKE) -C $* entry GPU_ARCH=$(GPU_ARCH) DEFS="$$(cat $*/DEFS)"
 MK
 echo "probe in $out: ${names[*]}"
