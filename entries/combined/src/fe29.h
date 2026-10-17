@@ -14,8 +14,9 @@
 //   loose: every limb < 2^30.6.     Output of add/sub on tight inputs.
 //   signed: |limb| < 2^30 + 2^18, two's complement. Output of dif, and add of
 //           tight inputs read as signed: the second operand of leaf32.
-//   mul needs one tight operand and one loose operand (or tighter); ip needs
-//   all four operands tight; leaf32 one tight and one signed.
+//   mul needs one tight operand and one loose operand (or tighter); mul_add
+//   the same plus a tight addend; ip needs all four operands tight; leaf32 one
+//   tight and one signed.
 // Every function compiles for both host and device, so the CPU tests exercise
 // exactly the arithmetic the GPU runs.
 #pragma once
@@ -88,6 +89,19 @@ __device__ __forceinline__ int64_t mul0i(uint32_t a, int32_t b) {
     asm("v_mad_i64_i32 %0, %1, %2, %3, 0" : "=v"(r), "=s"(dead) : "v"(a), "v"(b));
     return r;
 }
+// acc + c as c * 1 + acc: one v_mad_u64_u32 instead of an add and an
+// add-with-carry. adds takes c in an SGPR (the 1 is an inline constant, so it
+// stays within the one-SGPR constant bus limit).
+__device__ __forceinline__ uint64_t addv(uint32_t c, uint64_t acc) {
+    uint64_t r, dead;
+    asm("v_mad_u64_u32 %0, %1, %2, 1, %3" : "=v"(r), "=s"(dead) : "v"(c), "v"(acc));
+    return r;
+}
+__device__ __forceinline__ uint64_t adds(uint32_t c, uint64_t acc) {
+    uint64_t r, dead;
+    asm("v_mad_u64_u32 %0, %1, %2, 1, %3" : "=v"(r), "=s"(dead) : "s"(c), "v"(acc));
+    return r;
+}
 #else
 HD uint64_t mad(uint32_t a, uint32_t b, uint64_t c) { return (uint64_t)a * b + c; }
 HD uint64_t mads(uint32_t a, uint32_t b, uint64_t c) { return (uint64_t)a * b + c; }
@@ -96,11 +110,14 @@ HD uint64_t mul0s(uint32_t a, uint32_t b) { return (uint64_t)a * b; }
 HD int64_t madi(uint32_t a, int32_t b, int64_t c) { return (int64_t)(int32_t)a * b + c; }
 HD int64_t madis(int32_t a, uint32_t b, int64_t c) { return (int64_t)a * (int32_t)b + c; }
 HD int64_t mul0i(uint32_t a, int32_t b) { return (int64_t)(int32_t)a * b; }
+HD uint64_t addv(uint32_t c, uint64_t acc) { return acc + c; }
+HD uint64_t adds(uint32_t c, uint64_t acc) { return acc + c; }
 #endif
 
 // Operand kind as a template switch: S = the second operand is wave-uniform.
 template <bool S> HD uint64_t madk(uint32_t a, uint32_t b, uint64_t c) { return S ? mads(a, b, c) : mad(a, b, c); }
 template <bool S> HD uint64_t mul0k(uint32_t a, uint32_t b) { return S ? mul0s(a, b) : mul0(a, b); }
+template <bool S> HD uint64_t addk(uint32_t c, uint64_t acc) { return S ? adds(c, acc) : addv(c, acc); }
 
 // The carry out of a column: acc >> 29, a 64-bit value below 2^35 (one
 // v_lshrrev_b64, which issues at full rate: two 32-bit instructions measured
@@ -153,6 +170,43 @@ HD void mul_k(fe &r, const fe &a, const fe &b) {
 }
 
 HD void mul(fe &r, const fe &a, const fe &b) { mul_k<false>(r, a, b); }
+
+// r = a*b + c, reduced once. a tight, b loose (or tight), c tight. r tight.
+// r may alias any input. S: b and c are wave-uniform (SGPR operands). The
+// addend joins each low column's accumulator before the reduction: nine
+// one-instruction adds where a second limb product would cost 81 (the walk's
+// beta, whose other term became a table constant). Column bound: nine
+// tight-by-loose products plus the carry, folds and addend stay below 2^63.
+template <bool S>
+HD void mul_add_k(fe &r, const fe &a, const fe &b, const fe &c) {
+    uint32_t x[9], y[9], z[9];
+#pragma unroll
+    for (int i = 0; i < 9; i++) { x[i] = a.l[i]; y[i] = b.l[i]; z[i] = c.l[i]; }
+    uint64_t hprev = 0, acc = 0;
+#pragma unroll
+    for (int m = 0; m <= 8; m++) {
+        uint64_t h = 0;
+        if (m <= 7) {
+            const int k = m + 9;
+            h = mul0k<S>(x[k - 8], y[8]);
+#pragma unroll
+            for (int i = k - 7; i <= 8; i++) h = madk<S>(x[i], y[k - i], h);
+        }
+        acc = (m == 0) ? mul0k<S>(x[0], y[0]) : madk<S>(x[0], y[m], acc);
+#pragma unroll
+        for (int i = 1; i <= m; i++) acc = madk<S>(x[i], y[m - i], acc);
+        acc = addk<S>(z[m], acc);
+        if (m <= 7) acc = mads((uint32_t)h, (uint32_t)F261, acc);
+        if (m >= 1) acc = mads((uint32_t)(hprev >> 32), (uint32_t)F264, acc);
+        if (m == 8) break;
+        r.l[m] = (uint32_t)acc & M29;
+        acc = carry29(acc);
+        hprev = h;
+    }
+    fold_top(r, acc);
+}
+
+HD void mul_add(fe &r, const fe &a, const fe &b, const fe &c) { mul_add_k<false>(r, a, b, c); }
 
 // r = a^2. a tight. r tight. r may alias a.
 HD void sqr(fe &r, const fe &a) {

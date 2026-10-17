@@ -13,11 +13,19 @@
 //   The two denominators multiply to q_j = s^2 - lam^2: a table constant minus
 //   a per-batch constant, no multiplication. Bring both over q_j:
 //     y(C +- T_j) = (alpha_j +- beta_j) / q_j,
-//     alpha_j = y1 (r s) - (mu lam) y2,   beta_j = (lam y1) r - mu (y2 s),
-//   two-term inner products of per-batch values with table constants, each
-//   reduced once. Per pair of candidates: one forward multiply (prefix product
-//   of the q's), two backward (Montgomery's trick), two inner products, and two
-//   partial "leaf" products that compute only what the prefix filter needs.
+//     alpha_j = y1 (r s) - (mu lam) y2,   beta_j = (lam y1) r - mu (y2 s).
+//   Divide both by mu and let the inverses carry it instead:
+//     y(C +- T_j) = (alpha'_j +- beta'_j) mu / q_j,
+//     alpha'_j = (x1 y1)(r s) - lam y2,   beta'_j = y1^2 r - (y2 s),
+//   where y2 s is a table constant, so beta' is one limb product plus an
+//   addend: three products per pair instead of four. (Gemini's round-1 entry
+//   normalized its numerators to leave a table constant the same way.) The
+//   factor mu costs two multiplies per batch: the forward chain starts at
+//   W mu and the inverse is multiplied by mu, so every backward inverse comes
+//   out as mu / q_j and the pass ends at exactly 1/W, as the giant step needs.
+//   Per pair of candidates: one forward multiply (prefix product of the q's),
+//   two backward (Montgomery's trick), the two numerators, and two partial
+//   "leaf" products that compute only what the prefix filter needs.
 //   The forward pass stores one field element per pair (CKPT=1) or per two
 //   pairs (CKPT=2, the default).
 #pragma once
@@ -91,15 +99,16 @@ HD void inv(fe &r, const fe &z) {
     f29::mul(r, t, z11);
 }
 
-// Both candidates C +- T_j of pair j, given 1/q_j: the two inner products,
-// the two partial "leaf" products, the target pre-test, and (rarely) the
-// full multiply that settles a candidate exactly.
+// Both candidates C +- T_j of pair j, given invq = mu/q_j: the two
+// numerators, the two partial "leaf" products, the target pre-test, and
+// (rarely) the full multiply that settles a candidate exactly. w1 = x1 y1,
+// lam = y1/x1 and y1sq = y1^2 are the batch's numerator factors.
 template <int H, class Sink>
-HD void pair(const Lane &L, const fe &mulam, const fe &lamy1, const Entry &t, const fe &invq, int j,
+HD void pair(const fe &w1, const fe &lam, const fe &y1sq, const Entry &t, const fe &invq, int j,
              Sink &sink) {
     fe alpha, beta, Ap, Am;
-    f29::ip_k<true>(alpha, L.y, t.rs, mulam, t.ny2);
-    f29::ip_k<true>(beta, lamy1, t.r, L.mu, t.ny2s);
+    f29::ip_k<true>(alpha, w1, t.rs, lam, t.ny2);   // x1 y1 (r s) - lam y2
+    f29::mul_add_k<true>(beta, y1sq, t.r, t.ny2s);  // y1^2 r - y2 s
     f29::add(Ap, alpha, beta);
     f29::dif(Am, alpha, beta);  // signed limbs, as leaf32 takes them: no 128p bias
     // Hot path: y's low 32 bits. Only candidates that pass the 32-bit test
@@ -145,18 +154,23 @@ HD void pair(const Lane &L, const fe &mulam, const fe &lamy1, const Entry &t, co
 template <int H, class Tab, class Mem, class Sink>
 HD bool batch(Lane &L, const Giant &G, int64_t step, const Tab &tab, Mem &mem, Sink &sink) {
     sink.mark(0);  // phase 0: batch setup and giant-step numerators
-    fe lam, Lam, nLam, mulam, lamy1;
+    // The center itself, exactly. Tested first, so y1 holds no registers
+    // through the loops.
+    fe yc;
+    f29::canon(yc, L.y);
+    sink.test(f29::low64(yc), 0);
+
+    fe lam, Lam, nLam, w1, y1sq;
     f29::mul(lam, L.y, L.mu);
     f29::sqr(Lam, lam);
     f29::neg(nLam, Lam);  // q_j = sigma_j + nLam
     mem.set_nlam(nLam);   // parked outside the register file (LDS on the GPU)
-    f29::mul(mulam, L.mu, lam);
-    f29::mul(lamy1, lam, L.y);
+    f29::mul(w1, L.x, L.y);
+    f29::sqr(y1sq, L.y);
 
     // Giant step: x' = nX/dX, y' = nY/dY, 1/x' = dX/nX, all from W = dX dY nX.
     fe e, nX, nY, dX, dY, W;
-    f29::mul(e, L.x, L.y);
-    f29::mul_k<true>(e, e, G.dg);
+    f29::mul_k<true>(e, w1, G.dg);
     f29::ip_k<true>(nX, L.x, G.gy, L.y, G.gx);
     f29::ip_k<true>(nY, L.y, G.gy, L.x, G.gx);
     dX = e;
@@ -174,8 +188,9 @@ HD bool batch(Lane &L, const Giant &G, int64_t step, const Tab &tab, Mem &mem, S
     mem.store(GSLOT(H) + 3, nY);
 
     sink.mark(1);
-    fe P = W;
-    // Forward: P_j = W * q_1 * ... * q_j; store P_{j-CKPT} for j = CKPT, 2CKPT, ...
+    fe P;
+    f29::mul(P, W, L.mu);  // the chain starts at W mu (see the algebra above)
+    // Forward: P_j = W mu q_1 ... q_j; store P_{j-CKPT} for j = CKPT, 2CKPT, ...
 #if defined(__HIP_DEVICE_COMPILE__)
 #pragma unroll 1
 #endif
@@ -193,10 +208,11 @@ HD bool batch(Lane &L, const Giant &G, int64_t step, const Tab &tab, Mem &mem, S
     inv(I, P);
     f29::canon(Pc, P);
     const bool ok = !f29::is_zero_canon(Pc);
+    f29::mul(I, I, L.mu);  // I = mu/P_H, so the backward pass yields mu/q_j
 
     sink.mark(3);
 #if CKPT == 1
-    // Backward: I = 1/P_j on entry to step j. P_{j-1} is loaded one step
+    // Backward: I = mu/P_j on entry to step j. P_{j-1} is loaded one step
     // ahead so its memory latency overlaps a whole step of arithmetic.
     fe Pnext = mem.load(H - 1);
 #if defined(__HIP_DEVICE_COMPILE__)
@@ -207,16 +223,16 @@ HD bool batch(Lane &L, const Giant &G, int64_t step, const Tab &tab, Mem &mem, S
         const fe Pj1 = Pnext;
         Pnext = mem.load(j >= 2 ? j - 2 : 0);
         fe invq, q;
-        f29::mul(invq, Pj1, I);  // 1/q_j
+        f29::mul(invq, Pj1, I);  // mu/q_j
         f29::add(q, t.sigma, mem.nlam());
         f29::mul(I, I, q);
-        pair<H>(L, mulam, lamy1, t, invq, j, sink);
+        pair<H>(w1, lam, y1sq, t, invq, j, sink);
     }
 #else
     static_assert(CKPT == 2, "CKPT must be 1 or 2");
-    // Backward, two steps at a time from P_{j-2} (j even), I = 1/P_j:
-    //   A = P_{j-2} I = 1/(q_{j-1} q_j), 1/q_j = A q_{j-1}, 1/q_{j-1} = A q_j,
-    //   1/P_{j-2} = I q_j q_{j-1}: five multiplies per two steps (four in the
+    // Backward, two steps at a time from P_{j-2} (j even), I = mu/P_j:
+    //   A = P_{j-2} I = mu/(q_{j-1} q_j), mu/q_j = A q_{j-1}, mu/q_{j-1} = A q_j,
+    //   mu/P_{j-2} = I q_j q_{j-1}: five multiplies per two steps (four in the
     //   one-step loop) for half the scratch traffic.
     fe Pnext = mem.load(H / 2 - 1);
 #if defined(__HIP_DEVICE_COMPILE__)
@@ -229,22 +245,17 @@ HD bool batch(Lane &L, const Giant &G, int64_t step, const Tab &tab, Mem &mem, S
         f29::mul(A, Pj2, I);
         f29::add(q0, tab(j).sigma, mem.nlam());
         f29::add(q1, tab(j - 1).sigma, mem.nlam());
-        f29::mul(inv0, A, q1);  // 1/q_j
-        f29::mul(inv1, A, q0);  // 1/q_{j-1}
+        f29::mul(inv0, A, q1);  // mu/q_j
+        f29::mul(inv1, A, q0);  // mu/q_{j-1}
         f29::mul(I, I, q0);
         f29::mul(I, I, q1);
-        pair<H>(L, mulam, lamy1, tab(j), inv0, j, sink);
-        pair<H>(L, mulam, lamy1, tab(j - 1), inv1, j - 1, sink);
+        pair<H>(w1, lam, y1sq, tab(j), inv0, j, sink);
+        pair<H>(w1, lam, y1sq, tab(j - 1), inv1, j - 1, sink);
     }
 #endif
 
     sink.mark(4);
-    // The center itself, exactly.
-    fe yc;
-    f29::canon(yc, L.y);
-    sink.test(f29::low64(yc), 0);
-
-    // Now I = 1/W. Recover the next center.
+    // Now I = mu/P_0 = 1/W. Recover the next center.
     dX = mem.load(GSLOT(H));
     dY = mem.load(GSLOT(H) + 1);
     nX = mem.load(GSLOT(H) + 2);

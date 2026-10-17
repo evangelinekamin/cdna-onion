@@ -1,8 +1,12 @@
-# onion-walk
+# onion-walk-combined
 
 A Tor v3 vanity-address grinder for AMD CDNA GPUs, implementing the
-`onionrig-grind/1` contract (`docs/design/CONTRACT.md`). Written by Claude
-Opus 5.5. MIT licensed (see `LICENSE`).
+`onionrig-grind/1` contract (`docs/design/CONTRACT.md`). It merges the best of
+the four round-1 arena entries: Claude Opus 5.5's onion-walk 0.6 (16.09 G/s on
+the MI210, the round's best) is the base, with its pair numerators normalized
+the way Gemini 4 Argon's entry normalized its own, which saves one of the four
+limb products per pair. Written by Claude Opus 5.5. MIT licensed (see
+`LICENSE`).
 
     make entry GPU_ARCH=gfx90a     # the arena build (gfx950 also compiles)
     make test                      # CPU tests: reference math, GPU field code, walk emulation
@@ -18,12 +22,17 @@ inversion, then steps to the next center.
 with two denominators x1*y2 -+ y1*x2. Dividing through by x1*x2 turns them into
 s_j -+ lam (s = y2/x2 from a table, lam = y1/x1 once per batch), whose product
 q_j = s_j^2 - lam^2 needs no multiplication. Both candidates of the pair are
-then (alpha_j +- beta_j) / q_j, where alpha and beta are two-term inner products
-of per-batch values with table constants, each reduced once. Montgomery's
-trick over the q_j needs one stored field element per *pair* (not two per
-candidate), and the walk keeps only every other one (see Memory). Per pair of
-candidates: one forward multiply, two and a half backward, two inner products,
-two partial products for the filter.
+then (alpha_j +- beta_j) / q_j, numerators with four terms between them, each a
+per-batch value times a table constant. The inverses carry a factor mu = 1/x1
+(the forward chain starts at W mu and the inverse is multiplied by mu, two
+multiplies per batch), which turns one term into a pure table constant:
+alpha' = (x1 y1)(r s) - lam y2 is a two-term inner product and
+beta' = y1^2 r - (y2 s) one product plus an addend, three limb products
+instead of four. Montgomery's trick over the q_j needs one stored field element
+per *pair* (not two per candidate), and the walk keeps only every other one
+(see Memory). Per pair of candidates: one forward multiply, two and a half
+backward, three products for the numerators, two partial products for the
+filter.
 
 **Filter (src/fe29.h, `leaf32`).** The last multiply only needs y's low bits.
 Forming the low columns (mod 2^32) and the top columns of the product (35 limb
@@ -85,8 +94,10 @@ work nearly every cycle; the card is power limited and holds an effective
 
 ## Credits and inspiration
 
-Ideas, not code: the dual addition law and y-only testing as described in the
-honion documentation; walking by 8B with Montgomery batch inversion (mkp224o);
+Ideas, not code: the numerator normalization from Gemini 4 Argon's round-1
+entry (its pair-factored law leaves one table constant per numerator); the
+dual addition law and y-only testing as described in the honion
+documentation; walking by 8B with Montgomery batch inversion (mkp224o);
 the split-key offset scheme (AlexanderYastrebov/onion-vanity-address, honion);
 Hisil, Wong, Carter and Dawson's extended twisted Edwards formulas;
 Montgomery's simultaneous-inversion trick. The protocol harness structure

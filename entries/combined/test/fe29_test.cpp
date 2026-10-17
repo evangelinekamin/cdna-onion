@@ -78,6 +78,8 @@ int main() {
         expect(same(r, ref::fe_sq(ra)) && tight(r), "sqr", i);
         f29::ip(r, a, c, d, a);
         expect(same(r, ref::fe_add(ref::fe_mul(ra, rc), ref::fe_mul(rd, ra))) && tight(r), "ip", i);
+        f29::mul_add(r, a, b, c);  // the walk's beta: one product plus a tight addend
+        expect(same(r, ref::fe_add(ref::fe_mul(ra, rb), rc)) && tight(r), "mul_add", i);
         f29::add(r, a, c);
         expect(same(r, ref::fe_add(ra, rc)), "add", i);
         f29::sub(r, a, c);

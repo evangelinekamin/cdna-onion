@@ -1,4 +1,4 @@
-// onion-walk: a Tor v3 vanity-address grinder for AMD CDNA (onionrig-grind/1).
+// onion-walk-combined: a Tor v3 vanity-address grinder for AMD CDNA (onionrig-grind/1).
 //
 // Each GPU lane walks its own sequence of centers C, testing C and C +- j*B8
 // (j = 1..H) per batch with a single field inversion; see walk.h for the
@@ -38,8 +38,8 @@
 #endif
 
 static const char *CONTRACT = "onionrig-grind/1";
-static const char *NAME = "onion-walk";
-static const char *VERSION = "0.6";
+static const char *NAME = "onion-walk-combined";
+static const char *VERSION = "0.7";
 static const char *MODEL = "Claude Opus 5.5 (claude-opus-5-5)";
 
 static constexpr int H = WALK_H;

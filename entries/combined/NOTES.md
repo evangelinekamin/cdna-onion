@@ -344,3 +344,32 @@ GB of scratch), a divstep (Bernstein-Yang) inversion instead of Fermat
 host side was also made sturdier after v0.6 without touching the benchmark
 path: any four targets use the fast filter, larger sets a binary search in
 LDS, and a GPU without room for the second lane set runs one.
+
+## Round-1 merge: onion-walk-combined 0.7 (2026-10-17)
+
+Base: this entry as of b03ce98 (v0.6 kernel, 16.091 G/s official). The four
+round-1 entries were reviewed side by side (`results/arena-round1-mi210/review/`
+in the onionrig repo). Gemini 4 Argon's entry had found the same free
+denominator product, but normalized its numerators so one term is a table
+constant: y1 (a_j +- u1 b_j) / (c_j -+ w1). Applied here by letting the
+backward inverses carry mu = 1/x1:
+y(C +- T_j) = (alpha' +- beta') mu/q_j with alpha' = (x1 y1)(r s) - lam y2 and
+beta' = y1^2 r - (y2 s). beta' is one product plus an addend (`mul_add_k`, the
+addend joining each column as one `v_mad_u64_u32` times 1), so the numerators
+take three limb products instead of four. The chain starts at W mu and the
+inverse is multiplied by mu (two multiplies per batch), so the backward pass
+still ends at exactly 1/W for the giant step. The table is unchanged. The
+center is now tested before the loops, so y1 holds no registers through them.
+
+Other round-1 ideas checked and not needed: GPT's launch sizing (lanes at an
+exact multiple of resident capacity) is what this entry already does via
+hipOccupancyMaxActiveBlocksPerMultiprocessor; GPT's and Qwen's designs are
+memory-bound (128 B per candidate) and fix problems this design doesn't have.
+
+Static ISA (gfx90a, ROCm 7.2.4, H = 4096), backward loop main path per two
+pairs: v0.6 1660 VALU (1347 MAD) -> 0.7 1516 VALU (1203 MAD), -72 VALU per pair
+(81 MADs removed, 9 one-instruction adds added): ~888 VALU per pair instead of
+~960 (-7.5%). VGPR spills 6 -> 2, scratch 28 -> 12 bytes per lane, 4 waves/SIMD.
+CPU tests: fe29_test adds mul_add at the limb bounds (600,305 checks);
+walk_test unchanged and passing, and fails under two deliberate mutations
+(wrong addend, dropped mu).
