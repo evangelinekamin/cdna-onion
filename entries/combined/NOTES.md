@@ -435,3 +435,43 @@ Whether 1,020 fewer nops pay for 11 more VALU on CDNA3/4 is a question for the
 rental sweep (tools/rental, build `chain`). That sweep rotates the order every
 round, pairs each build with the base of the same round, and warms the GPU
 first.
+
+## First CDNA4 hardware: one MI350X (gfx950), RunPod, 2026-10-17
+
+The setup:
+- One AMD Instinct MI350 OAM: 256 CUs, 1,000 W limit.
+- ROCm 7.2.4 user space (`rocm/dev-ubuntu-22.04:7.2.4`) on an amdgpu 7.1.3 host driver.
+- `tools/rental/tune.sh` at its defaults, using the kit's prebuilt binaries.
+
+The pod ran for about 36 min. Raw results are in `results/rental-mi350x-20261017/` in the onionrig repo (gitignored).
+
+**Correctness.** All eight builds passed `--verify` on gfx950, F29_CHAIN_ASM included. The rig's conformance check of the default build passed.
+
+**`v_mad_u64_u32` runs at full rate on CDNA4.** The microbenchmark measured 58.6 per CU per measured clock (of 64). `v_fma_f64` measured 61.0 and `v_mul_lo_u32` 60.2.
+
+**The card is power-limited under this kernel, as the MI210 was.**
+- Telemetry: 1,000 W, 82 C, sclk about 1.53 GHz, which is 70% of the 2.2 GHz peak (the MI210 reached 70% of its peak too).
+- PROFILE builds: the default build reached 56.0 G/s at an effective 1,549 MHz; CKPT=1 reached 51.7 G/s at 1,358 MHz. CKPT=1's extra scratch traffic costs 12% of the clock against 4.7% fewer VALU.
+- Per CU per clock the kernel runs as on the MI210: about 0.14 G/s per CU-GHz on both.
+
+**Sweep.** `onionrig sweep` ran 6 rounds of 30 s after a 120 s warm-up, at the power cap. Each ratio is against the base cell of the same round, with a 95% interval.
+
+| Build | Ratio | 95% CI |
+|---|---|---|
+| base | 54.560 G/s | |
+| chain (F29_CHAIN_ASM=1) | 1.0017 | 0.9912-1.0123 |
+| h8k (WALK_H=8192) | 1.0033 | 0.9977-1.0090 |
+| ckpt1 | 0.9328 | 0.9219-0.9438 |
+| ckpt1-chain | 0.9411 | 0.9334-0.9489 |
+| streams1 | 0.9359 | 0.9290-0.9430 |
+| base2 (the base again) | 0.9999 | 0.9933-1.0065 |
+
+The pre-registered rule kept the default.
+
+What the sweep says:
+- **The nop fix is a wash.** At 4 waves per SIMD the other waves hide most of the nops.
+- **Except under CKPT=1.** There the waves stall on scratch loads more often, and chain recovers 0.9%. So the nops cost issue slots only when the other waves are stalled.
+- **Two streams matter more on 256 CUs.** STREAMS=1 costs 6.4%, against 4.1% on the MI210.
+
+**Official bench** (rig, plan 1 target x 5 characters, about 99,000 verified hits per run): **54.78 G/s (95% CI 54.12-55.45), 4 runs**, 3.17x the MI210's 17.294. The rig's median time to a 10-character prefix on one MI350X is 4.0 h.
+
