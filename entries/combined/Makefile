@@ -1,5 +1,5 @@
 # onion-walk: Tor v3 vanity grinder for AMD CDNA (onionrig-grind/1).
-#   make entry GPU_ARCH=gfx90a   the arena's build: ./entry
+#   make entry GPU_ARCH=gfx90a   the arena's build: ./entry (several archs: one fat binary)
 #   make test                    CPU tests (reference math, field code, walk emulation)
 #   make resource-usage          VGPRs / SGPRs / scratch / occupancy per kernel
 #   make isa                     AMD assembly, for reading the hot loop
@@ -12,13 +12,14 @@ DEFS      ?=
 SRC        = src/grind.hip
 DEPS       = $(wildcard src/*.h src/*.hip)
 HIPFLAGS   = -O3 -std=c++17 -fno-slp-vectorize $(DEFS)
+OFFLOAD    = $(addprefix --offload-arch=,$(GPU_ARCH))
 LDLIBS     = -lpthread
 
 .PHONY: all test resource-usage isa clean
 all: entry
 
 entry: $(DEPS)
-	$(HIPCC) $(HIPFLAGS) --offload-arch=$(GPU_ARCH) -o $@ $(SRC) $(LDLIBS)
+	$(HIPCC) $(HIPFLAGS) $(OFFLOAD) -o $@ $(SRC) $(LDLIBS)
 
 build:
 	mkdir -p build

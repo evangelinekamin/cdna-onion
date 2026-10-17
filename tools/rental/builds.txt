@@ -1,0 +1,12 @@
+# The builds of entries/combined a tuning session compares: a name, then the
+# preprocessor defines. The first is the base. Names starting with "prof" are
+# profiling builds (effective shader clock and cycles per phase), timed on
+# their own because profiling costs a little speed.
+base
+chain        -DF29_CHAIN_ASM=1
+ckpt1        -DCKPT=1
+ckpt1-chain  -DCKPT=1 -DF29_CHAIN_ASM=1
+h8k          -DWALK_H=8192
+streams1     -DSTREAMS=1
+prof         -DPROFILE=1
+prof-ckpt1   -DPROFILE=1 -DCKPT=1

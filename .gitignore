@@ -15,6 +15,7 @@ build/
 bench/
 search/
 sweep/
+dist/
 results/
 arena-data/
 entries/*/entry
