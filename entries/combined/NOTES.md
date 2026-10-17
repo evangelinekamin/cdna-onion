@@ -373,3 +373,22 @@ pairs: v0.6 1660 VALU (1347 MAD) -> 0.7 1516 VALU (1203 MAD), -72 VALU per pair
 CPU tests: fe29_test adds mul_add at the limb bounds (600,305 checks);
 walk_test unchanged and passing, and fails under two deliberate mutations
 (wrong addend, dropped mu).
+
+MI210 measurements of 0.7 (Sol, tools/sol/probe.sbatch; interleaved rounds
+of 8 s, 4 targets x 5 characters, self-timed, ~0.5% above the rig):
+
+| Probe | Variants (G/s, spread over rounds) |
+|---|---|
+| probe 1 (5 rounds; the conformance check ran on the node's other MI210 meanwhile) | v0.6 16.175 (2.8%), 0.7 17.234 (5.5%); PROFILE clocks equal (~1170-1190 MHz) |
+| probe 2 (6 rounds, node to itself) | v0.6 16.144 (2.4%), **0.7 17.340 (1.8%)**, 0.7 H=8192 17.360 (1.8%), 0.7 CKPT=1 16.588 (2.0%) |
+
+0.7 is +7.4% over v0.6, the instruction cut almost exactly, at the same
+clock. H=8192 is within noise of 4096 (kept 4096, half the scratch), and
+CKPT=2 still beats CKPT=1 by 4.5%. Lesson from probe 1: jobs on sg250's two
+MI210s slow each other (rounds swung 20-34% while the check ran, and the
+check's own rates read 7 G/s), so measure with the node to yourself.
+
+Official bench (judge.sbatch, rig 0.1.0, plan 4 targets x 5 characters after
+a 17.603 G/s calibration): **17.294 G/s (95% CI 17.265-17.322)**, 3 runs of
+60 s at ~1360 MHz reported sclk, 289 W, 84-86 C; 124,199 hits flagged, all
+verified, no degenerate batches. Conformance check: all pass.

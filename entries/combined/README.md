@@ -86,11 +86,14 @@ against an exhaustive host computation.
 | 0.3 | 14.250 G/s | 9.8x |
 | 0.5 | 15.834 G/s | 10.9x |
 | 0.6 | 16.091 G/s | 11.1x |
+| 0.7 (combined) | **17.294 G/s** (95% CI 17.265-17.322) | 11.9x |
 
-Per pair of candidates the hot loops execute about 960 VALU instructions (780
-of them 32x32+64 multiply-adds) at 4 waves per SIMD, and the SIMDs issue VALU
-work nearly every cycle; the card is power limited and holds an effective
-~1.2 GHz shader clock under this load. `NOTES.md` has the measurement log.
+Versions 0.1-0.6 are Claude's round-1 entry; 0.7 is the merge. Per pair of
+candidates the hot loops now execute about 888 VALU instructions (about 700 of
+them 32x32+64 multiply-adds) at 4 waves per SIMD, down from about 960, and the
+SIMDs issue VALU work nearly every cycle; the card is power limited (about
+290 W of its 300 W) and holds an effective ~1.2 GHz shader clock under this
+load. `NOTES.md` has the measurement log.
 
 ## Credits and inspiration
 
