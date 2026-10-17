@@ -118,7 +118,7 @@ not reproduce the address.
 | Symptom | What to do |
 |---|---|
 | `rocminfo` lists no GPU, or `/dev/kfd` is denied | Add the user to the `video` and `render` groups. In a container, pass `--device=/dev/kfd --device=/dev/dri --group-add video --group-add render` |
-| "the prebuilt binaries do not cover or load" | The scripts build locally with the host's `hipcc` instead. gfx950 needs ROCm 7.0 or newer. Without that, run inside `rocm/dev-ubuntu-24.04:7.2.4` |
+| "the prebuilt binaries do not cover or load" | The prebuilt binaries need glibc 2.34 or newer (Ubuntu 22.04 or later) and a ROCm 7 runtime. Otherwise the scripts build locally with the host's `hipcc`, which takes under a minute. gfx950 needs ROCm 7.0 or newer; without that, run inside `rocm/dev-ubuntu-22.04:7.2.4` |
 | "namespace isolation unavailable" | Nothing to do. These are our own builds, so the scripts pass `--no-isolation`, and the results record it |
 | `rocminfo` shows 8 agents per GPU | The GPUs are in CPX partition mode: each agent is one XCD. `grind.sh` searches on every agent, which is fine. `tune.sh` tunes on agent 0 alone, so its ratios hold but its absolute rates are per XCD |
 | "taskset is not installed" | Nothing to do. Entries run without CPU pinning |

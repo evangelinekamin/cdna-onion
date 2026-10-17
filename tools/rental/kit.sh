@@ -3,12 +3,14 @@
 # committed tree's rig, entries/combined, the vectors and these scripts, plus
 # prebuilt fat binaries (gfx90a, gfx942, gfx950) of every build in builds.txt
 # and of the microbenchmark, compiled offline in the ROCm 7.2.4 container from
-# the same committed sources. No keys or results go in.
+# the same committed sources. No keys or results go in. The container is the
+# Ubuntu 22.04 one: binaries linked against 24.04's C library need glibc 2.38
+# and fail to load on 22.04 hosts.
 #
 # Usage: tools/rental/kit.sh [OUT.tar.gz]   (default: dist/rental-kit-<commit>.tar.gz)
 set -euo pipefail
 ROOT=$(cd "$(dirname "$0")/../.." && pwd)
-IMAGE=rocm/dev-ubuntu-24.04:7.2.4
+IMAGE=rocm/dev-ubuntu-22.04:7.2.4
 ARCHS=(gfx90a gfx942 gfx950)
 # entries/baseline/src: the microbenchmark borrows its field code.
 PATHS=(pyproject.toml uv.lock README.md LICENSE src vectors entries/combined entries/baseline/src
