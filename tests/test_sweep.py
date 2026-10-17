@@ -69,7 +69,9 @@ def test_sweep_streams_every_cell_and_picks_the_fastest_honest_build(tmp_path, c
     assert records[0]["kind"] == "session" and records[0]["base"] == "base"
     assert records[1]["kind"] == "warmup" and records[1]["variant"] == "base"
     assert records[-1]["kind"] == "summary" and records[-1]["pick"] == "fast"
-    assert "pick: fast" in capsys.readouterr().out
+    printed = capsys.readouterr().out
+    assert "pick: fast" in printed
+    assert "prof: 1.000 G/s (proof of work z +0.0; effective clock 1500 MHz)" in printed
     assert cli.main(["sweep", "--summarize", str(log)]) == 0
     assert "pick: fast" in capsys.readouterr().out
 

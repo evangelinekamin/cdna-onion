@@ -159,7 +159,11 @@ def format_cell(record: dict[str, Any]) -> str:
     head = f"round {record['round']} {record['variant']}:"
     if "error" in record:
         return f"{head} ERROR {record['error']}"
-    return f"{head} {record['rate'] / 1e9:.3f} G/s (proof of work z {record['z']:+.1f})"
+    notes = f"proof of work z {record['z']:+.1f}"
+    prof = record.get("prof")
+    if isinstance(prof, list) and prof and isinstance(prof[0], int | float):
+        notes += f"; effective clock {prof[0]:.0f} MHz"  # a profiling build's first figure
+    return f"{head} {record['rate'] / 1e9:.3f} G/s ({notes})"
 
 
 def format_rows(rows: Sequence[Row]) -> str:
