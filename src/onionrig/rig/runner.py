@@ -156,14 +156,14 @@ class _Capture(threading.Thread):
 
 
 @dataclass(frozen=True)
-class _Ran:
+class Ran:
     code: int | None   # None: killed for exceeding a limit
     stdout: str
     stderr: str
     problem: str
 
 
-def _run_bounded(spec: EntrySpec, flags: list[str], seconds: float, cap: int) -> _Ran:
+def run_bounded(spec: EntrySpec, flags: list[str], seconds: float, cap: int) -> Ran:
     with _Launch(spec, flags) as launch:
         assert launch.proc.stdout is not None and launch.proc.stderr is not None
         out, err = _Capture(launch.proc.stdout, cap), _Capture(launch.proc.stderr, cap)
@@ -175,14 +175,14 @@ def _run_bounded(spec: EntrySpec, flags: list[str], seconds: float, cap: int) ->
     out.join(timeout=2)
     err.join(timeout=2)
     if out.overflow or err.overflow:
-        return _Ran(None, out.text, err.text, f"printed more than {cap} bytes")
+        return Ran(None, out.text, err.text, f"printed more than {cap} bytes")
     if code is None:
-        return _Ran(None, out.text, err.text, f"exceeded {seconds:.0f} s")
-    return _Ran(code, out.text, err.text, "")
+        return Ran(None, out.text, err.text, f"exceeded {seconds:.0f} s")
+    return Ran(code, out.text, err.text, "")
 
 
 def run_info(spec: EntrySpec, limits: Limits = DEFAULT_LIMITS) -> proto.Info:
-    ran = _run_bounded(spec, ["--info"], limits.info_seconds, limits.max_output_bytes)
+    ran = run_bounded(spec, ["--info"], limits.info_seconds, limits.max_output_bytes)
     if ran.problem:
         raise proto.ProtocolError(f"--info {ran.problem}")
     if ran.code != 0:
@@ -209,7 +209,7 @@ def _summary(stdout: str) -> dict | None:
 
 
 def run_verify(spec: EntrySpec, vectors_dir: Path, limits: Limits = DEFAULT_LIMITS) -> VerifyReport:
-    ran = _run_bounded(spec, ["--verify", str(vectors_dir.resolve())], limits.verify_seconds,
+    ran = run_bounded(spec, ["--verify", str(vectors_dir.resolve())], limits.verify_seconds,
                        limits.max_output_bytes)
     if ran.problem:
         return VerifyReport(False, {}, f"--verify {ran.problem}")

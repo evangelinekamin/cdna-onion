@@ -21,6 +21,7 @@ from .rig import bench as bench_mod
 from .rig import check as check_mod
 from .rig import isolation, results, runner
 from .rig import search as search_mod
+from .rig import sweep as sweep_mod
 from .rig import telemetry as tm
 from .rig.protocol import sanitize
 
@@ -151,6 +152,35 @@ def cmd_duel(args: argparse.Namespace) -> int:
     print(f"{sanitize(d.b)} vs {sanitize(d.a)}: {d.ratio.ratio:.4f}x "
           f"(95% CI {d.ratio.ci_low:.4f} - {d.ratio.ci_high:.4f}, {d.pairs} pairs) "
           f"-> {d.ratio.verdict}")
+    return 0
+
+
+def cmd_sweep(args: argparse.Namespace) -> int:
+    if args.summarize:
+        rows = sweep_mod.summarize(results.read_jsonl([Path(args.summarize)]))
+        print(sweep_mod.format_rows(rows) if rows else f"no cells in {args.summarize}")
+        return 0 if rows else 1
+    try:
+        variants = [sweep_mod.parse_variant(text) for text in args.variants]
+    except ValueError as exc:
+        raise SystemExit(f"sweep: {exc}") from None
+    names = [v.name for v in variants]
+    if not variants or len(set(names)) != len(names):
+        raise SystemExit("sweep: give one or more NAME=COMMAND builds with distinct names")
+    spec = runner.EntrySpec(variants[0].argv, device=args.device, cpus=_cpus(args.cpus),
+                            isolate=not args.no_isolation)
+    config = sweep_mod.SweepConfig(args.rounds, args.seconds, args.targets, args.chars,
+                                   args.warmup)
+    writer = _session_file(args, "sweep")
+    print(f"sweep: {len(variants)} builds x {args.rounds} rounds of {args.seconds:g} s on GPU "
+          f"{args.device}; cells -> {writer.path}", flush=True)
+    try:
+        rows = sweep_mod.run_sweep(variants, spec, config, writer,
+                                   progress=lambda line: print(line, flush=True))
+    except KeyboardInterrupt:
+        print("interrupted; summary of the cells so far:")
+        rows = sweep_mod.summarize(results.read_jsonl([writer.path]))
+    print(sweep_mod.format_rows(rows) if rows else "no cells")
     return 0
 
 
@@ -329,6 +359,21 @@ def build_parser() -> argparse.ArgumentParser:
     _entry_options(p)
     _bench_options(p)
     p.set_defaults(func=cmd_duel)
+
+    p = sub.add_parser("sweep", help="choose between builds: interleaved self-timed runs "
+                                      "(entries with a --bench mode)")
+    p.add_argument("variants", nargs="*", metavar="NAME=COMMAND",
+                   help="the builds to compare; the first is the base")
+    p.add_argument("--rounds", type=int, default=4,
+                   help="rounds; each runs every build once, in rotated order")
+    p.add_argument("--seconds", type=float, default=30.0, help="per cell")
+    p.add_argument("--targets", type=int, default=1, help="random targets per cell")
+    p.add_argument("--chars", type=int, default=5, help="characters per target")
+    p.add_argument("--warmup", type=float, default=0.0,
+                   help="seconds of the base build before the first round, not counted")
+    p.add_argument("--summarize", metavar="JSONL", help="only summarize an earlier sweep's log")
+    _entry_options(p)
+    p.set_defaults(func=cmd_sweep, out="sweep")
 
     p = sub.add_parser("board", help="leaderboard from result files")
     p.add_argument("files", nargs="*")
