@@ -93,6 +93,9 @@ against an exhaustive host computation.
 
 On an AMD Instinct MI350X (CDNA4, gfx950, 256 CUs, 1,000 W), 0.7.1 benchmarks
 at **54.78 G/s** (95% CI 54.12-55.45, the rig's proof-of-work rate, 4 runs).
+On an 8x AMD Instinct MI355X node (1,400 W each) a real search ran at
+**575 G/s** (about 72 G/s per GPU), finding three 10-character `evangeline`
+addresses in 84 minutes.
 
 Versions 0.1-0.6 are Claude's round-1 entry; 0.7 is the merge. Per pair of
 candidates the hot loops now execute about 888 VALU instructions (about 700 of

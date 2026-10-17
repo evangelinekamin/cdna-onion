@@ -475,3 +475,24 @@ What the sweep says:
 
 **Official bench** (rig, plan 1 target x 5 characters, about 99,000 verified hits per run): **54.78 G/s (95% CI 54.12-55.45), 4 runs**, 3.17x the MI210's 17.294. The rig's median time to a 10-character prefix on one MI350X is 4.0 h.
 
+## 8x MI355X: a real search (2026-10-17)
+
+The setup:
+- One node: 8x AMD Instinct MI355X (gfx950, 256 CUs, 1,400 W each), SPX/NPS1, ROCm 7.2.0 host user space.
+- The kit's prebuilt 0.7.1 default build (`tools/rental/grind.sh`), one entry per GPU, each pinned to its own CPU pair.
+- The build had been chosen on the MI350X. Nothing was tuned on this node.
+
+The run:
+- Every GPU passed `--verify` in 14 s.
+- The search ran from 20:31:57 to 21:55:33 UTC (83.6 min), until the allocation ended.
+- Results: `results/mi355x-8x-20261017/` in the onionrig repo (gitignored).
+
+**Rate: 575.0 G/s for the node**, 69.2-74.7 G/s per GPU (mean 71.9; self-reported, from the last 50 progress readings per GPU). It was flat from the first minute: 577.9 G/s at 2 min, 575.0 at 82 min.
+
+**Clock and power.** Telemetry showed 1.0-1.4 kW and 1.9-2.24 GHz per GPU at about 79 C, with no throttling. The GPUs pinned at 1,400 W ran the lowest clocks, so the spread between GPUs is chip-to-chip power variation. Per CU-GHz the kernel again matches the MI210 and MI350X (about 0.14 G/s at about 2.0 GHz).
+
+**Hits.** The target was `evangeline` (10 characters, p = 2^-50).
+- About 2.9e15 candidates, against an expected 2.56 hits; 3 were found, at 24.1, 45.5 and 72.3 min.
+- Each was verified by the rig on the node.
+- Each was combined into a Tor key on the owner's machine, and Tor 0.4.9.14 derived the same address from the key with networking disabled.
+
