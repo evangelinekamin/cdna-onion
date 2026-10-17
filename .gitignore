@@ -31,3 +31,5 @@ docs/*.pdf
 docs/*.html
 # Internal only: quotes all-rights-reserved kernel source, never distribute
 docs/research/gpumode-kernel-sources.md
+# Internal only: rate projections; competitors must not be handed a target
+docs/research/cdna4.md
