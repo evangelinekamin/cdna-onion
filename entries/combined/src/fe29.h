@@ -22,6 +22,18 @@
 #pragma once
 #include <cstdint>
 
+// F29_CHAIN_ASM=1: one inline-asm statement per multiply-add chain (see chain
+// below); the default is one per multiply-add.
+#ifndef F29_CHAIN_ASM
+#define F29_CHAIN_ASM 0
+#endif
+#if F29_CHAIN_ASM && defined(__HIP_DEVICE_COMPILE__) && !defined(F29_NO_ASM)
+#define F29_CHAINED 1
+#include "fe29_chains.h"
+#else
+#define F29_CHAINED 0
+#endif
+
 #if defined(__HIPCC__)
 #define HD __host__ __device__ __forceinline__
 #else
@@ -119,10 +131,138 @@ template <bool S> HD uint64_t madk(uint32_t a, uint32_t b, uint64_t c) { return 
 template <bool S> HD uint64_t mul0k(uint32_t a, uint32_t b) { return S ? mul0s(a, b) : mul0(a, b); }
 template <bool S> HD uint64_t addk(uint32_t c, uint64_t acc) { return S ? adds(c, acc) : addv(c, acc); }
 
+// Chains: acc + a_0 b_0 + ... + a_{n-1} b_{n-1}, added in that order (chain0
+// starts from zero; chaini and chaini0 are the signed forms). Every column of
+// a product is one chain. By default each multiply-add in it is its own asm
+// statement. F29_CHAIN_ASM=1 makes the whole chain one statement
+// (fe29_chains.h), for gfx940 and later: there LLVM assumes any inline asm may
+// hide a dst-forwarding hazard and puts an s_nop after a statement whenever the
+// next instruction touches a register it wrote, which with one multiply-add
+// per statement means about 0.7 s_nop per VALU instruction in the hot loops
+// (gfx90a needs none). One statement per chain removes most of them, but it
+// also stops the scheduler from interleaving independent chains. n is a
+// compile-time constant once the callers' loops are unrolled.
+template <bool S>
+HD uint64_t chain(const uint32_t *a, const uint32_t *b, int n, uint64_t acc) {
+#if F29_CHAINED
+    return chain_asm<S, false>(a, b, n, acc);
+#else
+#pragma unroll
+    for (int t = 0; t < n; t++) acc = madk<S>(a[t], b[t], acc);
+    return acc;
+#endif
+}
+
+template <bool S>
+HD uint64_t chain0(const uint32_t *a, const uint32_t *b, int n) {
+#if F29_CHAINED
+    return chain_asm<S, true>(a, b, n, 0);
+#else
+    uint64_t acc = 0;
+#pragma unroll
+    for (int t = 0; t < n; t++) acc = t == 0 ? mul0k<S>(a[t], b[t]) : madk<S>(a[t], b[t], acc);
+    return acc;
+#endif
+}
+
+HD int64_t chaini(const uint32_t *a, const int32_t *b, int n, int64_t acc) {
+#if F29_CHAINED
+    return chaini_asm<false>(a, b, n, acc);
+#else
+#pragma unroll
+    for (int t = 0; t < n; t++) acc = madi(a[t], b[t], acc);
+    return acc;
+#endif
+}
+
+HD int64_t chaini0(const uint32_t *a, const int32_t *b, int n) {
+#if F29_CHAINED
+    return chaini_asm<true>(a, b, n, 0);
+#else
+    int64_t acc = 0;
+#pragma unroll
+    for (int t = 0; t < n; t++) acc = t == 0 ? mul0i(a[t], b[t]) : madi(a[t], b[t], acc);
+    return acc;
+#endif
+}
+
+// Column c (0..16) of a product: the limb products x_i y_{c-i} for every i
+// with both limbs in range, in increasing i, as one chain (from zero, or added
+// to acc). With NP = 2 (inner products) each i contributes x[0]_i y[0]_{c-i}
+// and then x[1]_i y[1]_{c-i}.
+template <bool S, int NP>
+HD uint64_t column(const uint32_t (&x)[NP][9], const uint32_t (&y)[NP][9], int c, bool zero,
+                   uint64_t acc) {
+    uint32_t ta[9 * NP], tb[9 * NP];
+    int n = 0;
+#pragma unroll
+    for (int i = c > 8 ? c - 8 : 0; i <= (c < 8 ? c : 8); i++) {
+#pragma unroll
+        for (int p = 0; p < NP; p++) {
+            ta[n] = x[p][i];
+            tb[n] = y[p][c - i];
+            n++;
+        }
+    }
+    return zero ? chain0<S>(ta, tb, n) : chain<S>(ta, tb, n, acc);
+}
+
+// column's signed form (one product), for leaf32.
+HD int64_t columni(const uint32_t (&x)[9], const int32_t (&y)[9], int c, bool zero, int64_t acc) {
+    uint32_t ta[9];
+    int32_t tb[9];
+    int n = 0;
+#pragma unroll
+    for (int i = c > 8 ? c - 8 : 0; i <= (c < 8 ? c : 8); i++) {
+        ta[n] = x[i];
+        tb[n] = y[c - i];
+        n++;
+    }
+    return zero ? chaini0(ta, tb, n) : chaini(ta, tb, n, acc);
+}
+
+// Column c of a square, with x2 = 2x: the cross terms x_i x2_{c-i} for
+// i < c - i, then x_{c/2}^2 for even c, as one chain.
+HD uint64_t sqr_column(const uint32_t (&x)[9], const uint32_t (&x2)[9], int c, bool zero,
+                       uint64_t acc) {
+    uint32_t ta[5], tb[5];
+    int n = 0;
+#pragma unroll
+    for (int i = c > 8 ? c - 8 : 0; 2 * i < c; i++) {
+        ta[n] = x[i];
+        tb[n] = x2[c - i];
+        n++;
+    }
+    if ((c & 1) == 0) {
+        ta[n] = x[c / 2];
+        tb[n] = x[c / 2];
+        n++;
+    }
+    return zero ? chain0<false>(ta, tb, n) : chain<false>(ta, tb, n, acc);
+}
+
 // The carry out of a column: acc >> 29, a 64-bit value below 2^35 (one
 // v_lshrrev_b64, which issues at full rate: two 32-bit instructions measured
 // slower).
 HD uint64_t carry29(uint64_t acc) { return acc >> 29; }
+
+// Low column m's folds, as one chain: 1216 lo(h) for m <= 7, with h the high
+// column m+9, and 9728 hi(hprev) for m >= 1, with hprev the high column m+8.
+HD uint64_t folds(uint64_t acc, uint64_t h, uint64_t hprev, int m) {
+    uint32_t a[2], b[2];
+    int n = 0;
+    if (m <= 7) {
+        a[n] = (uint32_t)h;
+        b[n] = (uint32_t)F261;
+        n++;
+    }
+    if (m >= 1) {
+        a[n] = (uint32_t)(hprev >> 32);
+        b[n] = (uint32_t)F264;
+        n++;
+    }
+    return chain<true>(a, b, n, acc);
+}
 
 // The end of a reduction: limb 8 from column 8's accumulator acc (< 2^63),
 // and the carry out of it (bits 261 and up), folded into limbs 0 and 1:
@@ -131,42 +271,43 @@ HD uint64_t carry29(uint64_t acc) { return acc >> 29; }
 HD void fold_top(fe &r, uint64_t acc) {
     const uint32_t lo = (uint32_t)acc, hi = (uint32_t)(acc >> 32);
     r.l[8] = lo & M29;
-    uint64_t t = mads(hi, (uint32_t)F264, (uint64_t)r.l[0]);
-    t = mads(lo >> 29, (uint32_t)F261, t);  // t < 2^45
+    const uint32_t a[2] = {hi, lo >> 29}, b[2] = {(uint32_t)F264, (uint32_t)F261};
+    const uint64_t t = chain<true>(a, b, 2, (uint64_t)r.l[0]);  // t < 2^45
     r.l[0] = (uint32_t)t & M29;
     r.l[1] += (uint32_t)(t >> 29);
 }
 
-// r = a * b. a tight, b loose (or both tight). r tight. r may alias a or b.
-// S: b is wave-uniform (SGPR operands).
-template <bool S>
-HD void mul_k(fe &r, const fe &a, const fe &b) {
-    uint32_t x[9], y[9];
-#pragma unroll
-    for (int i = 0; i < 9; i++) { x[i] = a.l[i]; y[i] = b.l[i]; }
+// r = x[0] y[0] + ... + x[NP-1] y[NP-1] (+ z when ADD), reduced once: the
+// common body of mul, mul_add and ip below. S: every y (and z) is wave-uniform
+// (SGPR operands).
+template <bool S, int NP, bool ADD>
+HD void mul_core(fe &r, const uint32_t (&x)[NP][9], const uint32_t (&y)[NP][9],
+                 const uint32_t *z) {
     // Streaming order: high column c_{m+9} is formed just before low column m
     // folds it in, so only two high columns are ever live (register pressure).
     uint64_t hprev = 0, acc = 0;
 #pragma unroll
     for (int m = 0; m <= 8; m++) {
-        uint64_t h = 0;
-        if (m <= 7) {
-            const int k = m + 9;
-            h = mul0k<S>(x[k - 8], y[8]);
-#pragma unroll
-            for (int i = k - 7; i <= 8; i++) h = madk<S>(x[i], y[k - i], h);
-        }
-        acc = (m == 0) ? mul0k<S>(x[0], y[0]) : madk<S>(x[0], y[m], acc);
-#pragma unroll
-        for (int i = 1; i <= m; i++) acc = madk<S>(x[i], y[m - i], acc);
-        if (m <= 7) acc = mads((uint32_t)h, (uint32_t)F261, acc);
-        if (m >= 1) acc = mads((uint32_t)(hprev >> 32), (uint32_t)F264, acc);
+        const uint64_t h = m <= 7 ? column<S, NP>(x, y, m + 9, true, 0) : 0;
+        acc = column<S, NP>(x, y, m, m == 0, acc);
+        if constexpr (ADD) acc = addk<S>(z[m], acc);
+        acc = folds(acc, h, hprev, m);
         if (m == 8) break;
         r.l[m] = (uint32_t)acc & M29;
         acc = carry29(acc);
         hprev = h;
     }
     fold_top(r, acc);
+}
+
+// r = a * b. a tight, b loose (or both tight). r tight. r may alias a or b.
+// S: b is wave-uniform (SGPR operands).
+template <bool S>
+HD void mul_k(fe &r, const fe &a, const fe &b) {
+    uint32_t x[1][9], y[1][9];
+#pragma unroll
+    for (int i = 0; i < 9; i++) { x[0][i] = a.l[i]; y[0][i] = b.l[i]; }
+    mul_core<S, 1, false>(r, x, y, nullptr);
 }
 
 HD void mul(fe &r, const fe &a, const fe &b) { mul_k<false>(r, a, b); }
@@ -179,31 +320,10 @@ HD void mul(fe &r, const fe &a, const fe &b) { mul_k<false>(r, a, b); }
 // tight-by-loose products plus the carry, folds and addend stay below 2^63.
 template <bool S>
 HD void mul_add_k(fe &r, const fe &a, const fe &b, const fe &c) {
-    uint32_t x[9], y[9], z[9];
+    uint32_t x[1][9], y[1][9], z[9];
 #pragma unroll
-    for (int i = 0; i < 9; i++) { x[i] = a.l[i]; y[i] = b.l[i]; z[i] = c.l[i]; }
-    uint64_t hprev = 0, acc = 0;
-#pragma unroll
-    for (int m = 0; m <= 8; m++) {
-        uint64_t h = 0;
-        if (m <= 7) {
-            const int k = m + 9;
-            h = mul0k<S>(x[k - 8], y[8]);
-#pragma unroll
-            for (int i = k - 7; i <= 8; i++) h = madk<S>(x[i], y[k - i], h);
-        }
-        acc = (m == 0) ? mul0k<S>(x[0], y[0]) : madk<S>(x[0], y[m], acc);
-#pragma unroll
-        for (int i = 1; i <= m; i++) acc = madk<S>(x[i], y[m - i], acc);
-        acc = addk<S>(z[m], acc);
-        if (m <= 7) acc = mads((uint32_t)h, (uint32_t)F261, acc);
-        if (m >= 1) acc = mads((uint32_t)(hprev >> 32), (uint32_t)F264, acc);
-        if (m == 8) break;
-        r.l[m] = (uint32_t)acc & M29;
-        acc = carry29(acc);
-        hprev = h;
-    }
-    fold_top(r, acc);
+    for (int i = 0; i < 9; i++) { x[0][i] = a.l[i]; y[0][i] = b.l[i]; z[i] = c.l[i]; }
+    mul_core<S, 1, true>(r, x, y, z);
 }
 
 HD void mul_add(fe &r, const fe &a, const fe &b, const fe &c) { mul_add_k<false>(r, a, b, c); }
@@ -215,26 +335,12 @@ HD void sqr(fe &r, const fe &a) {
     for (int i = 0; i < 9; i++) { x[i] = a.l[i]; x2[i] = a.l[i] << 1; }
     uint64_t h[8];
 #pragma unroll
-    for (int k = 9; k <= 16; k++) {
-        // Cross terms x_i * 2x_{k-i} for i < k - i, then the square for even k.
-        uint64_t s = (k == 16) ? mul0(x[8], x[8]) : mul0(x[k - 8], x2[8]);
+    for (int k = 9; k <= 16; k++) h[k - 9] = sqr_column(x, x2, k, true, 0);
+    uint64_t acc = 0;
 #pragma unroll
-        for (int i = k - 7; 2 * i < k; i++) s = mad(x[i], x2[k - i], s);
-        if ((k & 1) == 0 && k != 16) s = mad(x[k / 2], x[k / 2], s);
-        h[k - 9] = s;
-    }
-    // Column 0 is the square x0^2; then fold, carry, and the rest.
-    uint64_t acc = mul0(x[0], x[0]);
-    acc = mads((uint32_t)h[0], (uint32_t)F261, acc);
-    r.l[0] = (uint32_t)acc & M29;
-    acc = carry29(acc);
-#pragma unroll
-    for (int m = 1; m <= 8; m++) {
-#pragma unroll
-        for (int i = 0; 2 * i < m; i++) acc = mad(x[i], x2[m - i], acc);
-        if ((m & 1) == 0) acc = mad(x[m / 2], x[m / 2], acc);
-        if (m <= 7) acc = mads((uint32_t)h[m], (uint32_t)F261, acc);
-        acc = mads((uint32_t)(h[m - 1] >> 32), (uint32_t)F264, acc);
+    for (int m = 0; m <= 8; m++) {
+        acc = sqr_column(x, x2, m, m == 0, acc);
+        acc = folds(acc, m <= 7 ? h[m] : 0, m >= 1 ? h[m - 1] : 0, m);
         if (m == 8) break;
         r.l[m] = (uint32_t)acc & M29;
         acc = carry29(acc);
@@ -246,38 +352,15 @@ HD void sqr(fe &r, const fe &a) {
 // S: b and d are wave-uniform (SGPR operands).
 template <bool S>
 HD void ip_k(fe &r, const fe &a, const fe &b, const fe &c, const fe &d) {
-    uint32_t x[9], y[9], u[9], v[9];
+    uint32_t x[2][9], y[2][9];
 #pragma unroll
-    for (int i = 0; i < 9; i++) { x[i] = a.l[i]; y[i] = b.l[i]; u[i] = c.l[i]; v[i] = d.l[i]; }
-    uint64_t hprev = 0, acc = 0;
-#pragma unroll
-    for (int m = 0; m <= 8; m++) {
-        uint64_t h = 0;
-        if (m <= 7) {
-            const int k = m + 9;
-            h = mul0k<S>(x[k - 8], y[8]);
-            h = madk<S>(u[k - 8], v[8], h);
-#pragma unroll
-            for (int i = k - 7; i <= 8; i++) {
-                h = madk<S>(x[i], y[k - i], h);
-                h = madk<S>(u[i], v[k - i], h);
-            }
-        }
-        acc = (m == 0) ? mul0k<S>(x[0], y[0]) : madk<S>(x[0], y[m], acc);
-        acc = madk<S>(u[0], v[m], acc);
-#pragma unroll
-        for (int i = 1; i <= m; i++) {
-            acc = madk<S>(x[i], y[m - i], acc);
-            acc = madk<S>(u[i], v[m - i], acc);
-        }
-        if (m <= 7) acc = mads((uint32_t)h, (uint32_t)F261, acc);
-        if (m >= 1) acc = mads((uint32_t)(hprev >> 32), (uint32_t)F264, acc);
-        if (m == 8) break;
-        r.l[m] = (uint32_t)acc & M29;
-        acc = carry29(acc);
-        hprev = h;
+    for (int i = 0; i < 9; i++) {
+        x[0][i] = a.l[i];
+        y[0][i] = b.l[i];
+        x[1][i] = c.l[i];
+        y[1][i] = d.l[i];
     }
-    fold_top(r, acc);
+    mul_core<S, 2, false>(r, x, y, nullptr);
 }
 
 HD void ip(fe &r, const fe &a, const fe &b, const fe &c, const fe &d) { ip_k<false>(r, a, b, c, d); }
@@ -382,26 +465,20 @@ HD bool leaf32(const fe &a, const fe &b, uint32_t &low) {
     int32_t y[9];
 #pragma unroll
     for (int i = 0; i < 9; i++) { x[i] = a.l[i]; y[i] = (int32_t)b.l[i]; }
-    int64_t c9 = mul0i(x[1], y[8]);
-#pragma unroll
-    for (int i = 2; i <= 8; i++) c9 = madi(x[i], y[9 - i], c9);
+    const int64_t c9 = columni(x, y, 9, true, 0);
     // Mod 2^32 the products and folds do not care about signs.
     const uint32_t d0 = (uint32_t)mads((uint32_t)c9, (uint32_t)F261, (uint64_t)mul0i(x[0], y[0]));
     const uint32_t d1 = x[0] * (uint32_t)y[1] + x[1] * (uint32_t)y[0];
-    int64_t c7 = mul0i(x[0], y[7]);
-#pragma unroll
-    for (int i = 1; i <= 7; i++) c7 = madi(x[i], y[7 - i], c7);
-    const int64_t c15 = madi(x[8], y[7], mul0i(x[7], y[8]));
-    const int64_t c16 = mul0i(x[8], y[8]);
+    const int64_t c7 = columni(x, y, 7, true, 0);
+    const int64_t c15 = columni(x, y, 15, true, 0);
+    const int64_t c16 = columni(x, y, 16, true, 0);
     // A signed column c = hi 2^32 + lo with hi = c >> 32 (floor) and lo the
     // unsigned low word: the lo fold is unsigned, the hi fold signed.
     const int64_t d7 = madis((int32_t)(c15 >> 32), (uint32_t)F264,
                              (int64_t)mads((uint32_t)c16, (uint32_t)F261, (uint64_t)c7));
     // n = d8 + floor(d7 / 2^29) with d8 = c8 + 9728 hi(c16): c8's chain starts
     // from the carry, which saves a 64-bit add.
-    int64_t n = madi(x[0], y[8], d7 >> 29);
-#pragma unroll
-    for (int i = 1; i <= 8; i++) n = madi(x[i], y[8 - i], n);
+    int64_t n = columni(x, y, 8, false, d7 >> 29);
     n = madis((int32_t)(c16 >> 32), (uint32_t)F264, n);
     low = d0 + (d1 << 29) + 19u * (uint32_t)(n >> 23);
     return (((uint32_t)n + 0x80u) & 0x7FFFFFu) < 0x100u;

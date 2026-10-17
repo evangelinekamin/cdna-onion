@@ -392,3 +392,46 @@ Official bench (judge.sbatch, rig 0.1.0, plan 4 targets x 5 characters after
 a 17.603 G/s calibration): **17.294 G/s (95% CI 17.265-17.322)**, 3 runs of
 60 s at ~1360 MHz reported sclk, 289 W, 84-86 C; 124,199 hits flagged, all
 verified, no degenerate batches. Conformance check: all pass.
+
+## One asm statement per chain: F29_CHAIN_ASM (2026-10-17, 0.7.1)
+
+On gfx940 and later, LLVM's hazard recognizer assumes any inline asm may hide
+a dst-forwarding (OPSEL/SDWA) hazard. It puts an `s_nop 0` after a statement
+whenever the next instruction reads or overwrites a register the statement
+wrote. Every multiply-add here was its own statement, and each writes the
+same dead carry-out pair, so nearly every one got a nop. gfx942 and gfx950
+compile to identical hot loops, with 163 + 1,053 `s_nop` per two pairs on
+259 + 1,516 VALU. The hardware needs none of them: `v_mad_u64_u32` uses
+neither OPSEL nor SDWA (CDNA4 ISA section 4.5, table 11).
+
+fe29.h now forms every column of a product as one chain (`column`, `columni`,
+`sqr_column`, `folds`), and mul, mul_add and ip share one body (`mul_core`).
+By default a chain is still one statement per multiply-add. The default
+build's hot loops have the same instruction mix as 0.7's, with the same count
+per opcode and a slightly different order (one nop fewer on gfx942/gfx950).
+`-DF29_CHAIN_ASM=1` makes each chain one statement (fe29_chains.h).
+
+Static counts per two pairs (ROCm 7.2.4):
+
+| gfx942 / gfx950 | VALU fwd + bwd | s_nop fwd + bwd | VGPRs, VGPR spills |
+|---|---|---|---|
+| default | 259 + 1,516 | 163 + 1,053 | 128, 10 |
+| F29_CHAIN_ASM=1 | 261 + 1,525 | 22 + 174 | 127, 10 |
+
+On gfx90a neither build has nops. The chain build spills 8 VGPRs instead of 2,
+all outside the loops.
+
+**MI210 results** (gfx90a, where there are no nops to remove):
+- The chain build passed the rig's conformance check (judge.sbatch, job 65960515).
+- Probe 3 ran 6 rounds of 20 s in a fixed order: 0.7, then the restructured
+  default, then chain. Means: 17.196, 17.144 and 17.108 G/s.
+- The GPU warmed from 17.5 to 17.0 G/s over the job, so later slots read low.
+  By the last round the gaps to 0.7 were -0.06% and -0.15%, about the warm-up
+  drift per slot.
+- So the restructure costs nothing measurable, and chaining costs at most
+  about 0.2% on a GPU it cannot help.
+
+Whether 1,020 fewer nops pay for 11 more VALU on CDNA3/4 is a question for the
+rental sweep (tools/rental, build `chain`). That sweep rotates the order every
+round, pairs each build with the base of the same round, and warms the GPU
+first.

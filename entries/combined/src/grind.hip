@@ -39,7 +39,7 @@
 
 static const char *CONTRACT = "onionrig-grind/1";
 static const char *NAME = "onion-walk-combined";
-static const char *VERSION = "0.7";
+static const char *VERSION = "0.7.1";
 static const char *MODEL = "Claude Opus 5.5 (claude-opus-5-5)";
 
 static constexpr int H = WALK_H;

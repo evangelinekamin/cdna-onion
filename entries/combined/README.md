@@ -52,7 +52,10 @@ column of 9 (or 18, for inner products) products accumulates carry-free in one
 high columns with 2^261 = 1216 (mod p) and carries sequentially, each carry
 seeding the next column's accumulator. The multiply-adds are inline asm, so LLVM
 cannot reassociate the carry to the end of a column (which costs a 64-bit add).
-Table constants are wave-uniform and enter as SGPR operands.
+Table constants are wave-uniform and enter as SGPR operands. Each column is
+one chain of multiply-adds; `-DF29_CHAIN_ASM=1` emits a chain as one asm
+statement instead of one per multiply-add, which on gfx940 and later saves the
+`s_nop` LLVM inserts after each statement (`NOTES.md`).
 
 **Memory.** Montgomery's trick stores a prefix product per step, read back in
 reverse; on the MI210 that HBM traffic costs about 20% at full volume. The
