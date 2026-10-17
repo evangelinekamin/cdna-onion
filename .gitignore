@@ -35,3 +35,6 @@ docs/*.html
 docs/research/gpumode-kernel-sources.md
 # Internal only: rate projections; competitors must not be handed a target
 docs/research/cdna4.md
+# Internal only until the preprint: unpublished findings and positioning
+docs/research/amd-access.md
+docs/research/prior-art.md
