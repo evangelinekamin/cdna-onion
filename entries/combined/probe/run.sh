@@ -19,6 +19,9 @@ case "$1" in
     while [ "$r" -le "$ROUNDS" ]; do
         for v in $(cat VARIANTS); do
             out=$(./"$v"/entry --bench "$SECS" $ARGS 2>/dev/null)
+            # Each cell's own JSON line, as it lands, on stderr (a Slurm log
+            # shows it at once; the rig keeps stdout for the summary).
+            echo "$out" | tail -n 1 | sed "s/^{/{\"round\": $r, \"variant\": \"$v\", /" >&2
             rate=$(echo "$out" | sed -n 's/.*"rate": \([0-9.e+]*\).*/\1/p')
             all="$all $v:${rate:-0}"
             # Profile builds: keep "clock MHz / alive fraction" per variant.

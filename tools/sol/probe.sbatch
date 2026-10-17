@@ -12,8 +12,10 @@
 #SBATCH --partition=fpga
 #SBATCH --qos=public
 #SBATCH --gres=gpu:mi200:1
-#SBATCH --cpus-per-task=4
-#SBATCH --mem=4G
+# Sized from seff (job 65960517: 6.4 min, about 1 core busy, 580 MB peak during
+# three parallel compiles): two cores and 2 GB.
+#SBATCH --cpus-per-task=2
+#SBATCH --mem=2G
 #SBATCH --time=00:30:00
 
 set -euo pipefail
@@ -27,9 +29,10 @@ APPT=(apptainer exec --containall --no-home --cleanenv
 cd "$DIR"
 rm -rf src build.log && mkdir src
 if ! "${APPT[@]}" bash -c "cd /probe && tar -xzf probe.tar.gz -C src --no-same-owner &&
-        cd src && unshare --user --map-root-user --net make -j4 entry GPU_ARCH=gfx90a" \
+        cd src && unshare --user --map-root-user --net make -j2 entry GPU_ARCH=gfx90a" \
         > build.log 2>&1; then
     echo "build failed:"; tail -20 build.log; exit 1
 fi
 # probe/run.sh exits 1 by design (it is not a conformant --verify).
 "${APPT[@]}" bash -c "cd /probe/src && ./entry --verify" || true
+seff "$SLURM_JOBID" || true

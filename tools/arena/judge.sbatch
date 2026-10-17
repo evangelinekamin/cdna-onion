@@ -56,5 +56,8 @@ if [ "$build_ok" = 1 ]; then
             > out/rig.txt 2>&1 || true
     fi
 fi
+status=0
 "${APPT[@]}" "$RIG/.venv/bin/python" -m onionrig.arena.judge \
-    "$KIND" /sub/out "$build_ok" "$build_seconds" /sub/build.log /sub/result.json
+    "$KIND" /sub/out "$build_ok" "$build_seconds" /sub/build.log /sub/result.json || status=$?
+seff "$SLURM_JOBID" || true
+exit "$status"
