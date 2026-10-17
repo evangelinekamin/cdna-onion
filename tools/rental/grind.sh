@@ -22,11 +22,13 @@ mkdir -p "$OUT"
 # shellcheck source-path=SCRIPTDIR source=lib.sh
 . "$(dirname "$0")/lib.sh"
 BUILD=${BUILD:-base}
+builds | awk '{ print $1 }' | grep -qx -- "$BUILD" ||
+    die "unknown build '$BUILD': the names are in tools/rental/builds.txt"
 
 log "grind.sh: build $BUILD, prefixes $*"
 normalize_visibility
 ensure_rig
-set_isolation
+set_confinement
 snapshot
 select_builds "$BUILD"
 
@@ -58,7 +60,7 @@ prefixes=()
 for p in "$@"; do prefixes+=(--prefix "$p"); done
 log "searching on GPUs ${good[*]}; hits -> $OUT/search/search.jsonl"
 "$RIG" search "$OUT/bin/$BUILD/entry" --points "$POINTS" "${prefixes[@]}" \
-    --devices "$(IFS=,; echo "${good[*]}")" --out "$OUT/search" "${ISO[@]}" 2>&1 |
+    --devices "$(IFS=,; echo "${good[*]}")" --out "$OUT/search" "${CONFINE[@]}" 2>&1 |
     tee -i -a "$OUT/search.log"
 log "search ended: $(grep -c '"kind": "hit"' "$OUT/search/search.jsonl" 2>/dev/null || echo 0)" \
     "verified hit(s) in search/search.jsonl"

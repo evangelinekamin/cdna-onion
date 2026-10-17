@@ -75,17 +75,22 @@ snapshot() {
     log "snapshot: environment.txt, rocminfo.txt, amd-smi-static.txt"
 }
 
-# ISO: the rig's flags for entry confinement. The rig refuses to run entries
-# without namespaces unless told; these are our own builds, so carry on without
-# them where the host forbids them (the results record it).
-# shellcheck disable=SC2034  # ISO is read by the scripts that source this file
-set_isolation() {
-    ISO=()
+# CONFINE: the rig's flags for confining entries. The rig refuses to run
+# entries without namespaces, or to pin them without taskset, unless told;
+# these are our own builds, so carry on without either where the host lacks
+# it (the results record --no-isolation).
+# shellcheck disable=SC2034  # CONFINE is read by the scripts that source this file
+set_confinement() {
+    CONFINE=()
     if ! "$ROOT/.venv/bin/python" -c 'import sys
 from onionrig.rig.isolation import isolation_available
 sys.exit(not isolation_available())'; then
-        ISO=(--no-isolation)
+        CONFINE+=(--no-isolation)
         log "namespace isolation unavailable here; running our own builds without it"
+    fi
+    if ! command -v taskset > /dev/null; then
+        CONFINE+=(--cpus all)
+        log "taskset is not installed; entries run without CPU pinning"
     fi
 }
 

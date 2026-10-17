@@ -8,8 +8,11 @@ Two kinds of session, each one command once the host is set up:
   search with that build. It does no tuning: it checks each GPU's
   arithmetic (under a minute), then searches until stopped.
 
-An MI300X compiles to the same hot loops as an MI355X (gfx942 and gfx950
-emit identical instructions here), so tuning on either one carries over.
+An MI300X runs the same hot loops as an MI355X (gfx942 and gfx950 compile to
+identical instructions here), so choices about instructions (`chain`) carry
+over from one to the other. Choices that trade memory traffic against
+instructions (`ckpt1`, `h8k`) depend on the clock and power regime, which
+differ: an MI355X settles those best.
 
 ## Before renting (the trusted machine)
 
@@ -31,7 +34,7 @@ emit identical instructions here), so tuning on either one carries over.
     ssh -i ~/.ssh/gpucloud_ed25519 USER@HOST
     tar -xzf rental-kit-*.tar.gz && cd kit
     tools/sol/setup.sh      # uv, Python and the rig, about a minute (needs the network)
-    tmux new -s run         # what runs in here survives a dropped connection
+    tmux new -s run         # survives a dropped connection (no tmux: use nohup ... &)
 
 `rocminfo | grep gfx` should list the GPUs.
 
@@ -77,9 +80,9 @@ never picked. The pick is written to `PICK`.
 
 ## Session B: the search on every GPU
 
-    BUILD=chain tools/rental/grind.sh results/search ../start-points.json PREFIX [PREFIX ...]
+    BUILD=PICKED tools/rental/grind.sh results/search ../start-points.json PREFIX [PREFIX ...]
 
-Set `BUILD` to the name session A picked.
+PICKED is the name in session A's `PICK` file (`base` if there was no session A).
 1. It verifies the build on every GPU in parallel and leaves out any GPU that fails.
 2. Then `onionrig search` runs one entry per GPU, each pinned to CPUs of its own.
 3. Each GPU reports its rate every few seconds in `search.log`, with that GPU's
@@ -117,6 +120,7 @@ not reproduce the address.
 | `rocminfo` lists no GPU, or `/dev/kfd` is denied | Add the user to the `video` and `render` groups. In a container, pass `--device=/dev/kfd --device=/dev/dri --group-add video --group-add render` |
 | "the prebuilt binaries do not cover or load" | The scripts build locally with the host's `hipcc` instead. gfx950 needs ROCm 7.0 or newer. Without that, run inside `rocm/dev-ubuntu-24.04:7.2.4` |
 | "namespace isolation unavailable" | Nothing to do. These are our own builds, so the scripts pass `--no-isolation`, and the results record it |
-| `rocminfo` shows 8 agents per GPU | The GPUs are in CPX partition mode. `grind.sh` uses every agent; that is fine |
+| `rocminfo` shows 8 agents per GPU | The GPUs are in CPX partition mode: each agent is one XCD. `grind.sh` searches on every agent, which is fine. `tune.sh` tunes on agent 0 alone, so its ratios hold but its absolute rates are per XCD |
+| "taskset is not installed" | Nothing to do. Entries run without CPU pinning |
 | The provider sets `HIP_VISIBLE_DEVICES` | The scripts move it to `ROCR_VISIBLE_DEVICES`, which is how the rig narrows each entry |
 | `telemetry-raw-g*.txt` instead of `telemetry-g*.jsonl` | The rig cannot parse this host's `amd-smi` output. The raw output is kept instead |

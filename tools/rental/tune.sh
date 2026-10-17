@@ -40,7 +40,15 @@ picked() {
     echo "${pick:-base}"
 }
 
-phase_snapshot() { snapshot; }
+phase_snapshot() {
+    local agents
+    snapshot
+    agents=$(gpu_agents | wc -l)
+    if [ "$agents" -gt 1 ]; then
+        log "note: $agents GPU agents visible and tuning uses agent $GPU alone. In CPX" \
+            "partition mode an agent is one XCD: build ratios hold, absolute rates do not."
+    fi
+}
 
 phase_build() {
     # shellcheck disable=SC2046  # build names are single words
@@ -49,6 +57,7 @@ phase_build() {
 
 phase_verify() {
     local name started ok
+    : > "$OUT/verify.jsonl"  # a rerun replaces the earlier verdicts
     for name in $(all_builds); do
         started=$SECONDS
         ok=false
@@ -79,7 +88,7 @@ phase_profile() {
     log "profile: ${#args[@]} builds, $PROFILE_SECONDS s each"
     "$RIG" sweep "${args[@]}" --rounds 1 --seconds "$PROFILE_SECONDS" --device "$GPU" \
         --out "$OUT/profile" \
-        "${ISO[@]}" > "$OUT/profile.txt" 2>&1 || log "profile failed: see profile.txt"
+        "${CONFINE[@]}" > "$OUT/profile.txt" 2>&1 || log "profile failed: see profile.txt"
 }
 
 phase_sweep() {
@@ -95,7 +104,7 @@ phase_sweep() {
     args+=("base2=$OUT/bin/base/entry")  # the base again, as the noise floor
     log "sweep: ${#args[@]} builds x $ROUNDS rounds of $CELL_SECONDS s after $WARMUP s warm-up"
     "$RIG" sweep "${args[@]}" --rounds "$ROUNDS" --seconds "$CELL_SECONDS" --warmup "$WARMUP" \
-        --device "$GPU" --out "$OUT/sweep" "${ISO[@]}" 2>&1 | tee -i "$OUT/sweep.txt"
+        --device "$GPU" --out "$OUT/sweep" "${CONFINE[@]}" 2>&1 | tee -i "$OUT/sweep.txt"
     sed -n 's/^pick: //p' "$OUT/sweep.txt" | tail -n 1 > "$OUT/PICK"
     log "sweep picked: $(picked)"
 }
@@ -105,7 +114,7 @@ phase_check() {
     pick=$(picked)
     log "check: the rig's conformance suite on $pick"
     if ! "$RIG" check "$OUT/bin/$pick/entry" --vectors "$ROOT/vectors" --device "$GPU" \
-            --out "$OUT/check" "${ISO[@]}" 2>&1 | tee -i "$OUT/check.txt"; then
+            --out "$OUT/check" "${CONFINE[@]}" 2>&1 | tee -i "$OUT/check.txt"; then
         die "$pick does not conform: see check.txt"
     fi
 }
@@ -114,7 +123,7 @@ phase_bench() {
     local pick
     pick=$(picked)
     log "bench: the rig's official benchmark of $pick (cool-downs between runs, 5-15 min)"
-    if ! "$RIG" bench "$OUT/bin/$pick/entry" --device "$GPU" --out "$OUT/bench" "${ISO[@]}" \
+    if ! "$RIG" bench "$OUT/bin/$pick/entry" --device "$GPU" --out "$OUT/bench" "${CONFINE[@]}" \
             2>&1 | tee -i "$OUT/bench.txt"; then
         die "bench failed: see bench.txt"
     fi
@@ -128,7 +137,7 @@ done
 log "tune.sh, GPU $GPU: ${PHASES[*]}"
 normalize_visibility
 ensure_rig
-set_isolation
+set_confinement
 start_telemetry "$GPU"
 trap stop_telemetry EXIT
 for phase in "${PHASES[@]}"; do "phase_$phase"; done
