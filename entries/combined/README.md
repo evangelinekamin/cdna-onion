@@ -35,8 +35,10 @@ backward, three products for the numerators, two partial products for the
 filter.
 
 **Filter (src/fe29.h, `leaf32`).** The last multiply only needs y's low bits.
-Forming the low columns (mod 2^32) and the top columns of the product (35 limb
-products of 81) gives y's low 32 bits exactly, except when the top columns
+Forming the low columns (mod 2^32) and the top columns of the product (31 of 81
+schoolbook limb products plus 4 fold multiplies, emitted as 33 wide
+multiply-adds plus 2 low-word multiplies against 99 wide multiply-adds for a
+full multiply) gives y's low 32 bits exactly, except when the top columns
 cannot settle the reduction quotient (about 1 in 2^15), which the function
 reports. Those candidates, and the rare ones passing the 32-bit test, get the
 full multiply. The test is exact for targets up to 6 characters and a

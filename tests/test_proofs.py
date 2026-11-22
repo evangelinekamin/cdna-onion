@@ -65,3 +65,41 @@ def test_sign_and_verify_roundtrip(tmp_path: Path) -> None:
     )
     assert tres.returncode != 0
     assert "FAIL" in tres.stderr
+
+
+def test_published_evangeline_proofs() -> None:
+    """Verify the checked-in 10-char evangeline proof-of-possession manifest."""
+    import nacl.bindings as sodium
+
+    proof_file = ROOT / "proofs/evangeline-proofs.json"
+    assert proof_file.is_file()
+    data = json.loads(proof_file.read_text(encoding="utf-8"))
+    assert data.get("format") == "cdna-onion-pop/1"
+    proofs = data.get("proofs")
+    assert isinstance(proofs, list) and len(proofs) == 3
+
+    addresses = {p["onion"] for p in proofs}
+    pubkeys = {p["pubkey_hex"] for p in proofs}
+    assert len(addresses) == 3
+    assert len(pubkeys) == 3
+    for p in proofs:
+        assert p["onion"].startswith("evangeline")
+        assert p["onion"].endswith(".onion")
+        assert p.get("message")
+        # Independent libsodium signature check
+        pub = bytes.fromhex(p["pubkey_hex"])
+        sig = bytes.fromhex(p["signature_hex"])
+        msg = p["message"].encode("utf-8")
+        assert sodium.crypto_sign_open(sig + msg, pub) == msg
+
+    # Verify via the standalone verifier under both venv and bare system Python.
+    for py in (sys.executable, "/usr/bin/python3"):
+        if not Path(py).exists():
+            continue
+        vres = subprocess.run(
+            [py, str(VERIFY_SCRIPT), str(proof_file)],
+            capture_output=True,
+            text=True,
+        )
+        assert vres.returncode == 0, vres.stderr
+        assert "All 3 proof(s) verified cleanly." in vres.stdout

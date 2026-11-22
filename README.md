@@ -6,7 +6,7 @@ Vanity prefixes are brute force: every extra character multiplies expected work 
 
 ## Measured performance
 
-Single-GPU rates are proof-of-work verified through `cdna-onion bench` (every reported hit re-derived on the host with `libsodium`; 95% Student-$t$ CIs). The 8x MI355X figure is sustained throughput during an 83.6-minute live search for `evangeline` that recovered three offline-verified 10-character Tor v3 keys.
+Single-GPU headline rates are proof-of-work verified through `cdna-onion bench` (every reported hit re-derived on the host with `libsodium`; 95% Student-$t$ CIs). The 8x MI355X figure is sustained progress-logged throughput during an 83.6-minute live search for `evangeline` that recovered three offline-verified 10-character Tor v3 keys. Scrubbed raw JSONL logs and redacted Round-1 agent transcripts are archived in the `v0.7.1` GitHub release.
 
 | Build | GPU (Architecture) | Power Cap | Throughput | 95% CI / Spread |
 |---|---|---:|---:|---|
@@ -36,7 +36,8 @@ make -C entries/combined test
 #    MI210 (CDNA2):  GPU_ARCH=gfx90a
 #    MI300X (CDNA3): GPU_ARCH=gfx942 DEFS="-DF29_CHAIN_ASM=1"
 #    MI350X/MI355X:  GPU_ARCH=gfx950
-make -C entries/combined entry GPU_ARCH=gfx950
+#    (Run `make -C entries/combined clean` first when switching GPU_ARCH or DEFS.)
+make -C entries/combined clean entry GPU_ARCH=gfx950
 
 # 4. Run GPU conformance check and proof-of-work benchmark
 uv run cdna-onion check entries/combined/entry
@@ -75,7 +76,7 @@ python3 proofs/verify.py
 ## Security model
 
 - **Split-key isolation:** Start scalars and Tor secret keys never leave the trusted machine, are written owner-only (`0600`) with core dumps disabled, and `keygen` refuses to write inside this repository tree.
-- **Confined benchmarking:** Untrusted kernel binaries run inside unprivileged Linux user, network, PID, and mount namespaces (offline, scrubbed environment, empty `HOME`, 1 visible GPU, 2 pinned CPU cores, bounded output). On cloud containers that block nested user namespaces, pass `--no-isolation` explicitly for your own audited builds.
+- **Confined benchmarking:** By default, `isolation.py` runs entries inside unprivileged Linux user, network, PID, and `/proc`-only mount namespaces (offline, scrubbed environment, empty `HOME`, `HIP_VISIBLE_DEVICES`, 2-core `taskset`, bounded output). Because mounting only `/proc` does not isolate the host filesystem, standalone local runs still see files accessible to the invoking user; untrusted arena submissions should additionally run inside an offline container and Slurm/cgroup allocation (as on ASU Sol's Apptainer `--containall` judge). On cloud containers that block nested user namespaces, pass `--no-isolation` explicitly for your own audited builds.
 - **Proof-of-work scoring:** Every benchmark draws a fresh random start point `A0` and short targets; throughput is `verified_unique_hits / (p_match * wall_seconds)`. A single invalid offset disqualifies the entire benchmark.
 
 ## Repository layout

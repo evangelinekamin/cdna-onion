@@ -17,19 +17,15 @@ job takes about 5 minutes of GPU time (4 on the MI210 in October 2026).
 
 ## One-time setup on a Sol login node
 
-    git clone https://github.com/evangelinekamin/onionrig.git ~/onionrig && cd ~/onionrig
+    git clone https://github.com/evangelinekamin/cdna-onion.git ~/cdna-onion && cd ~/cdna-onion
     tools/sol/setup.sh
 
 `setup.sh` puts a pinned, checksum-verified uv, a uv-managed Python, and the
 locked environment inside the repo (`.uv/`, `.venv/`), then checks the vectors.
-No shell startup file changes, so `rm -rf ~/onionrig` removes every trace. The
+No shell startup file changes, so `rm -rf ~/cdna-onion` removes every trace. The
 job picks up the repo-local uv by itself; for commands by hand, first run
 `. tools/sol/env.sh`. Cluster home and scratch storage are not archives: copy
 `results/` somewhere permanent after each run.
-
-The repo is private, so `git clone` asks for a username and password: give your
-GitHub username and a fine-grained personal access token limited to this one
-repository with read-only Contents access (GitHub > Settings > Developer settings).
 
 ## Run
 
