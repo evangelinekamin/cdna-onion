@@ -1,111 +1,99 @@
-# onionrig
+# cdna-onion
 
-How fast can a correct Tor v3 vanity-address generator run on AMD Instinct
-(CDNA) GPUs? This repo is the measuring stick. It contains:
+High-throughput Tor v3 `.onion` vanity address generator in HIP for AMD Instinct (CDNA2/CDNA3/CDNA4) GPUs, paired with a proof-of-work conformance and benchmarking harness (`onionrig`).
 
-- **`onionrig`**, a conformance and benchmark rig. It scores any generator by
-  verified proof-of-work, so a result cannot be inflated by bugs or dishonesty.
-- **A calibration baseline**: [onion-gpu](https://github.com/NIKIB0Y/onion-gpu)
-  ported to CUDA and HIP (gfx90a, gfx950) under a common contract.
-- **Split-key search tooling**: the GPU host never sees a secret, and found keys
-  are recombined locally and checked against real Tor.
-- **The design corpus** that competing models build against: `docs/`.
+Vanity prefixes are brute force: every extra character multiplies expected work by 32 ($2^5$). This repository contains the combined `fe29` + conjugate-pair factoring HIP kernel (`entries/combined`), the split-key search & proof-of-work verification harness (`src/onionrig`), shared correctness vectors (`vectors/`), and offline Ed25519 proof-of-possession signatures (`proofs/`).
 
-Vanity prefixes are pure brute force. Each extra character is 32 times more
-work, and 13 characters is out of reach on any hardware. The research question
-here is throughput, and in particular how the integer-vs-FP64 trade-off plays out
-across CDNA generations, which nobody has published yet.
+## Measured performance
 
-## Layout
+Single-GPU rates are proof-of-work verified through `cdna-onion bench` (every reported hit re-derived on the host with `libsodium`; 95% Student-$t$ CIs). The 8x MI355X figure is sustained throughput during an 83.6-minute live search for `evangeline` that recovered three offline-verified 10-character Tor v3 keys.
 
-    src/onionrig/        the rig (Python): reference math, vectors, protocol, scoring, CLI
-    entries/python-ref/  reference entry: the contract in ~170 lines of Python (slow, exact)
-    entries/baseline/    onion-gpu ported to the contract; CUDA + HIP from one source
-    tools/microbench/    primitive throughput (v_mad_u64_u32 vs v_fma_f64, ...) per GPU
-    tools/sol/           one-shot scripts for an MI210 node (Slurm) or any GPU box
-    tools/fetch-amd-docs.sh  downloads the AMD ISA guides and whitepapers into docs/
-    vectors/             shared correctness vectors (JSON + flat text), content-hashed
-    docs/design/         ARCHITECTURE, CONTRACT, CDNA-PERF-REFERENCE, MEGAPROMPT
-    docs/research/       literature, tool, competition, and CDNA-craft syntheses
-    tests/               ~230 tests: real-Tor key round trip, real-GPU conformance, hostile entries
+| Build | GPU (Architecture) | Power Cap | Throughput | 95% CI / Spread |
+|---|---|---:|---:|---|
+| Baseline (`onion-gpu` HIP port) | 1x MI210 (`gfx90a`) | 300 W | 1.45 G/s | 1.43-1.46 G/s |
+| `entries/combined` (`base`) | 1x MI210 (`gfx90a`) | 300 W | **17.294 G/s** | 17.265-17.322 G/s |
+| `entries/combined` (`chain`) | 1x MI300X VF (`gfx942`) | 750 W | **54.60 G/s** | 54.27-54.92 G/s |
+| `entries/combined` (`base`) | 1x MI350X (`gfx950`) | 1,000 W | **54.78 G/s** | 54.12-55.45 G/s |
+| `entries/combined` (`base`) | **8x MI355X** (`gfx950`) | 1,400 W/GPU | **575.0 G/s** | 69.2-74.7 G/s/GPU |
 
-## Quick start
+## Requirements
 
-    uv sync                                    # Python 3.11+, installs pynacl
-    uv run onionrig vectors --check            # confirm the shared vectors are intact
-    make -C entries/baseline cuda              # or: make hip (needs ROCm)
-    uv run onionrig check entries/baseline/build/grind-cuda
-    uv run onionrig bench entries/baseline/build/grind-cuda
-    uv run onionrig board                      # leaderboard of everything benchmarked
+- **GPU kernel:** AMD Instinct GPU (`gfx90a`, `gfx942`, or `gfx950`) with ROCm 7.x (`hipcc`).
+- **Harness & split-key tools:** Python 3.11+ and [`uv`](https://docs.astral.sh/uv/) (installs `pynacl`).
+- **Proof-of-possession verifier:** Any Python 3.8+ (zero external dependencies).
 
-Compare two entries on the same card with paired, ABBA-ordered runs:
+## Quick start: build and verify
 
-    uv run onionrig duel "ENTRY_A" "ENTRY_B" --pairs 4
+```bash
+# 1. Install the Python harness and check shared test vectors
+uv sync
+uv run cdna-onion vectors --check
 
-On an MI210 (Sol), `sbatch tools/sol/mi210-bench.sbatch` runs microbenchmarks,
-conformance, and a benchmark in one job (see `tools/sol/README.md`).
+# 2. Run CPU arithmetic and walk emulation tests (no GPU needed)
+make -C entries/combined test
 
-## How scoring works
+# 3. Build the HIP kernel for your CDNA GPU
+#    MI210 (CDNA2):  GPU_ARCH=gfx90a
+#    MI300X (CDNA3): GPU_ARCH=gfx942 DEFS="-DF29_CHAIN_ASM=1"
+#    MI350X/MI355X:  GPU_ARCH=gfx950
+make -C entries/combined entry GPU_ARCH=gfx950
 
-The rig gives an entry a fresh random public point `A0` and a few short target
-prefixes. The entry reports each offset `k` where `A0 + k*8B` matches a target,
-and the rig verifies every one with libsodium. One bad offset voids the run, and
-one invalid run fails the entry's whole benchmark.
-Throughput is `verified hits / (match probability * wall time)`, timed by the rig
-from `start` to `done`. Runs start from a cooled GPU, are sampled for thermal
-state throughout, and are repeated until the mean is precise. Benchmarks use
-real-search conditions (one to four targets, a low hit rate), so per-hit work
-does not distort the number. See `docs/design/CONTRACT.md`.
+# 4. Run GPU conformance check and proof-of-work benchmark
+uv run cdna-onion check entries/combined/entry
+uv run cdna-onion bench entries/combined/entry
+```
 
-## A real vanity address, safely
+*(The CLI is installed as both `cdna-onion` and `onionrig`; both invoke the same entry point.)*
 
-    # On a TRUSTED machine (never the GPU host, and never in this repo's tree):
-    uv run onionrig keygen ~/onion-keys --count 64
-    # Copy only ~/onion-keys/start-points.json to the GPU host. There:
-    uv run onionrig search ENTRY --points start-points.json --prefix myname --devices 0-7
-    # Back on the trusted machine, for a hit recorded in search/search.jsonl:
-    uv run onionrig combine --secrets ~/onion-keys/start-scalars.secret \
-        --point N --k K --address ADDRESS --out ~/my_service_hs
+## Generating a real vanity address (split-key)
 
-The search host only ever handles public points and offsets. `combine` rebuilds
-the key from the secret scalar, refuses anything Tor would load as a different
-key, and requires the hit's address so a typo or wrong point can never yield a
-silently different key. The test suite round-trips a found key through a real
-`tor` process. Tor needs the HiddenServiceDir to be owned by the user Tor runs
-as, with mode 0700. To put it under `/var/lib/tor`, write it as your user
-first and move it with `sudo mv` plus `sudo chown -R debian-tor:debian-tor`.
-Do not loosen the permissions.
+Secret scalars never touch the GPU host. Generate start keys offline on a trusted machine, send only the public points to the GPU node, and recombine matches locally:
+
+```bash
+# On your TRUSTED machine (never inside this repo tree, never on the GPU host):
+uv run cdna-onion keygen ~/onion-keys --count 64
+
+# Copy ONLY ~/onion-keys/start-points.json to the GPU host, then run:
+uv run cdna-onion search entries/combined/entry \
+    --points start-points.json --prefix myprefix --devices 0-7
+
+# Back on your TRUSTED machine, reconstruct a hit from search/search.jsonl:
+uv run cdna-onion combine --secrets ~/onion-keys/start-scalars.secret \
+    --point N --k K --address ADDRESS --out ~/my_service_hs
+```
+
+`combine` enforces Ed25519 scalar clamping so Tor loads the exact key, refuses any address mismatch, and writes `hs_ed25519_secret_key`, `hs_ed25519_public_key`, and `hostname` with mode `0700`/`0600`. To install under `/var/lib/tor`, move the directory and set ownership to the `tor` user (`sudo chown -R debian-tor:debian-tor /var/lib/tor/my_service_hs`) without loosening permissions.
+
+## Verify our 10-character `evangeline` proofs
+
+To verify offline that we possess the Ed25519 secret keys for all three 10-character `.onion` addresses found during the 8x MI355X search (no dependencies required):
+
+```bash
+python3 proofs/verify.py
+```
 
 ## Security model
 
-- **Secrets never reach the GPU host.** The split-key search ships public points
-  and returns public offsets. Start scalars and Tor keys exist only on the trusted
-  machine, are written owner-only (0600) with no core dumps, and are never logged.
-  `keygen` refuses to write inside this project tree, which is the tree you copy to
-  GPU hosts.
-- **Entries are untrusted code.** AI-written entries run confined by default:
-  - unprivileged network, PID, and mount namespaces (no network, no surviving
-    child processes),
-  - a scrubbed environment with a private empty HOME,
-  - one visible GPU and pinned CPUs,
-  - bounded output.
-  They still see the filesystem as you, so **never run entries on a machine or
-  account that holds start scalars or Tor keys.**
-- **On WSL**, Windows processes running as you can read the Linux filesystem
-  regardless of Linux permissions. For a real key, the trusted machine should
-  be a real Linux box, or at least one with nothing untrusted on the Windows side.
+- **Split-key isolation:** Start scalars and Tor secret keys never leave the trusted machine, are written owner-only (`0600`) with core dumps disabled, and `keygen` refuses to write inside this repository tree.
+- **Confined benchmarking:** Untrusted kernel binaries run inside unprivileged Linux user, network, PID, and mount namespaces (offline, scrubbed environment, empty `HOME`, 1 visible GPU, 2 pinned CPU cores, bounded output). On cloud containers that block nested user namespaces, pass `--no-isolation` explicitly for your own audited builds.
+- **Proof-of-work scoring:** Every benchmark draws a fresh random start point `A0` and short targets; throughput is `verified_unique_hits / (p_match * wall_seconds)`. A single invalid offset disqualifies the entire benchmark.
 
-## Status
+## Repository layout
 
-- Rig, vectors, contract, reference entry, split-key tools: complete and tested.
-- Baseline: verified on an RTX 4060 Ti (about 954 M candidates/s, matching
-  upstream's own figure). It compiles for gfx90a and gfx950, where the static
-  analysis shows occupancy of 1 wave/SIMD, the first lever for AMD entries. On
-  Sol's MI210 it conforms and measures 1.45 G candidates/s (95% CI 1.43 to 1.46).
-- MI210 microbenchmarks: the 32x32+64 integer multiply-add runs at the FP64 FMA
-  rate, so FP64 has no VALU edge on that card. Per effective clock every VALU
-  instruction issues at about 97% of peak; under dense ALU load the card clocks
-  7 to 14% below what `amd-smi` reports (`docs/design/CDNA-PERF-REFERENCE.md`
-  section 8).
-- Next: the model competition (`docs/design/MEGAPROMPT.md`), and the same job on
-  an MI355X.
+```text
+entries/combined/     HIP kernel (fe29 9x29 limbs, pair factoring, mu-fold, CKPT2, leaf32)
+entries/baseline/     HIPIFY'd onion-gpu calibration baseline (CUDA + HIP)
+entries/python-ref/   Reference implementation of the entry contract (~170 lines of Python)
+src/onionrig/         Confinement, proof-of-work benchmark rig, split-key & Tor key tooling
+proofs/               Ed25519 proof-of-possession signatures + zero-dependency verifier
+vectors/              Content-hashed field, point, walk, and onion test vectors
+tools/microbench/     CDNA primitive throughput microbenchmarks (v_mad_u64_u32 vs v_fma_f64)
+tools/rental/         Reproducible build, sweep, and multi-GPU search scripts
+docs/design/          Protocol contract, architecture spec, CDNA perf reference, arena brief
+docs/research/        Public literature, tool, and CDNA-craft notes
+tests/                Unit, security, proof-of-possession, and Tor round-trip test suite
+```
+
+## License
+
+MIT (see [LICENSE](LICENSE)).

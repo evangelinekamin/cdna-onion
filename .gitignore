@@ -37,6 +37,12 @@ docs/research/gpumode-kernel-sources.md
 docs/research/cdna4.md
 # Internal only until the preprint: unpublished findings and positioning
 docs/research/amd-access.md
+docs/research/cdna-rental.md
 docs/research/prior-art.md
 docs/research/preprint-outline.md
 docs/research/tor-disclosure-email.md
+docs/research/paper-anatomy.md
+docs/research/math-review.md
+*-artifact-content-authored-by-others.txt
+# Paper drafts (keep local until ready to publish)
+paper/

@@ -496,3 +496,115 @@ The run:
 - Each was verified by the rig on the node.
 - Each was combined into a Tor key on the owner's machine, and Tor 0.4.9.14 derived the same address from the key with networking disabled.
 
+
+## Roofline check of 0.7.1 on gfx950 (2026-11-02)
+
+Static counts from `make isa GPU_ARCH=gfx950` (ROCm 7.2.4), hot path only: the
+two rarely taken full-multiply blocks inside the backward loop are excluded.
+gfx942 compiles to the same hot loops.
+
+| Loop | VALU per two pairs | of which v_mad_u64/i64_32 |
+|---|---|---|
+| forward | 259 | 198 |
+| backward | 1,518 | 1,203 |
+
+Per pair 888.5 VALU (700.5 multiply-adds). The per-batch work (inversion: 254
+squarings at 95 VALU and 11 multiplies, the giant step, the center) adds about
+6.6 per pair at H=4096: about 895 VALU per pair, 447 per candidate.
+
+Against the PROFILE cell of the MI350X session (55.999 G/s at an effective
+1,549 MHz, 256 CUs, one VALU wave-instruction per CU per clock): the issue
+slots available are 256 x 1.549e9 x 64 / 55.999e9 = 453 lane-slots per
+candidate, so the kernel fills 447 / 453 = 98.7% of VALU issue. The per-wave
+phase clocks of the same cell (13,723 clocks per pair per wave at 4 waves per
+SIMD) give the same answer within a few percent.
+
+So no stall, occupancy or memory headroom is left; a faster kernel needs fewer
+instructions per candidate. Of the 895 per pair, 700 are multiply-adds (6.5
+field multiplications at 81 products plus their folds, and two 35-product
+partial multiplies for the filter); the other 190 are the reductions' shifts
+and masks, the adds, and the filter's compares. The multiply is at the floor
+of this instruction set: 29-bit limbs so that no column needs a carry;
+Karatsuba's 15 saved products cost more than that in 64-bit adds; 32-bit limbs
+need carries; the packed and dot instructions need smaller limbs, so more
+instructions. Trimming the non-multiply share is worth a few percent at most.
+Anything larger is a different design: matrix cores for the three
+table-constant products per pair (weighed above: the output layout needs
+cross-lane transposes, and CDNA4's FP64 matrix rate equals its vector rate, so
+it would have to be the int8 units with a byte-limb representation and a
+VALU-side reduction), or an algebraic structure that shares one inverse across
+more than two candidates. Neither was pursued; for the writeup the kernel is
+treated as done, and the remaining variable across parts is the clock each
+one holds under its power limit (0.14 G/s per CU-GHz on the MI210, MI350X and
+MI355X; the MI300X's clock reading does not reconcile, see its section).
+
+## MI300X (CDNA3, gfx942), AMD Developer Cloud, 2026-11-02
+
+First CDNA3 hardware. One AMD Instinct MI300X VF (304 CUs, 750 W cap), a
+DigitalOcean / AMD Developer Cloud droplet, Ubuntu 24.04 host with an amdgpu
+6.19 (ROCm 10.1) driver. The kit's prebuilt 0.7.1 binaries (built with ROCm
+7.2.4) ran inside `rocm/dev-ubuntu-22.04:7.2.4`, so the executed instructions
+are byte-identical to the MI210/MI350X/MI355X runs. `tools/rental/tune.sh` at
+its defaults; results in `results/rental-mi300x-20261102/` (gitignored).
+
+Checked that the newer toolchain changes nothing: the host's ROCm 10.1 hipcc
+compiles grind.hip to the same hot loops (6,117 multiply-adds per batch loop,
+8,603 VALU vs 8,583; the 20 extra are register moves). The compiler is not a
+variable here.
+
+**Correctness.** All eight builds passed `--verify`; the rig's conformance
+suite passed on the pick.
+
+**`v_mad_u64_u32` runs at full rate on CDNA3** too: 57.9 per CU per measured
+clock (of 64), matching CDNA2 and CDNA4.
+
+**Power-bound like the others.** Bench telemetry: 740 W of the 750 W cap,
+sclk about 1.09 GHz (half the 2.1 GHz peak), 69-72 C, no throttle. PROFILE
+build: 53.7 G/s at an effective 1,097 MHz.
+
+**Sweep picks `chain` on CDNA3** (6 rounds of 30 s, 120 s warm-up, each ratio
+vs the base of its round):
+
+| Build | Ratio | 95% CI |
+|---|---|---|
+| base | 53.818 G/s | |
+| chain (F29_CHAIN_ASM=1) | 1.0135 | 1.0118-1.0152 |
+| h8k (WALK_H=8192) | 1.0022 | 1.0007-1.0038 |
+| streams1 | 0.9315 | 0.9308-0.9322 |
+| ckpt1 | 0.8994 | 0.8977-0.9011 |
+| ckpt1-chain | 0.9101 | 0.9085-0.9116 |
+| base2 | 0.9997 | 0.9992-1.0002 |
+
+First time `chain` is picked. On the MI350X it was a wash (CI crossed 1); here
+its interval clears 1 by more than a percent. This is the mechanism the
+0.7.1 nop note and the MI350X sweep both predicted: the `s_nop` padding costs
+issue slots only when too few waves are ready to hide it, and the MI300X, at a
+lower clock relative to its memory, stalls on scratch loads more often, so it
+has fewer ready waves. The same reason chain recovered 0.9% under CKPT=1 on the
+MI350X. So the per-generation pick is `chain` for CDNA3, `base` for CDNA4.
+STREAMS=1 costs 6.9% (6.4% on the MI350X, 4.1% on the MI210): more CUs, more to
+hide behind two streams.
+
+**Official bench** (rig, chain build, 1 target x 5 chars): **54.60 G/s
+(95% CI 54.27-54.92), 3 runs.** The MI350X was 54.78 at 256 CUs and 1,000 W.
+A 304-CU CDNA3 at 750 W and a 256-CU CDNA4 at 1,000 W deliver the same grind
+rate: both are power-limited and the kernel is at its VALU issue roofline, so
+the throughput follows the power budget, not the generation or the core count.
+The rig's median time to a 10-character prefix on one MI300X is 4.0 h, as on
+one MI350X.
+
+**Loose end: the MI300X's effective clock does not reconcile with the
+instruction count.** The PROFILE build read 1,097 MHz (s_memtime per
+s_memrealtime second) and the bench telemetry averaged 1,091 MHz. At that
+clock, 304 CUs issue 304 x 1.097e9 x 64 / 53.738e9 = 397 lane-slots per
+candidate, but the hot path needs 447: the kernel would be at 113% of VALU
+issue, which cannot be. On the MI350X the same arithmetic gave 98.7%. The
+absolute rates do reconcile: the microbenchmark measured 2.62e13 multiply-adds
+per second on this card, and the grind's 447 VALU x 53.7 G/s = 2.40e13
+lane-ops/s is 92% of that, so the card is really running the kernel at about
+1.25 GHz or more. The likely cause is the virtualized GPU (an SR-IOV VF):
+either s_memtime does not count the shader clock the same way through the VF,
+or the eight XCDs run different clocks and the reading is not their mean.
+Not resolved; the official rate, the power telemetry (740 of 750 W) and the
+sweep ratios do not depend on it. For the writeup: quote rates and power, and
+do not quote a per-CU-GHz figure for the MI300X.

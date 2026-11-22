@@ -8,6 +8,7 @@ license = "MIT"
 dependencies = ["pynacl>=1.5"]
 
 [project.scripts]
+cdna-onion = "onionrig.cli:main"
 onionrig = "onionrig.cli:main"
 
 [build-system]
