@@ -1,0 +1,24 @@
+{
+  "format": "cdna-onion-pop/1",
+  "algorithm": "Ed25519 (RFC 8032) + Tor v3 .onion checksum (SHA3-256)",
+  "proofs": [
+    {
+      "onion": "evangeline2dz46v5oasmtk5x2dki7bwcsutaamclty5xboraa33icad.onion",
+      "pubkey_hex": "2540d3116869343cf3d5eb81264d5dbe86a47c3614a93001825cf1db85d10037",
+      "message": "Proof of possession for Evangeline Kamin's preprint 'High-Throughput Ed25519 Vanity Search in HIP Across Three Generations of AMD Instinct GPUs' (8x MI355X run, 2026-10-17).",
+      "signature_hex": "778edb78a06a043a43fc476c8fad2464c0b2cd807ec689ba5f6bba51656edf1e447c485f43e213dce422bf2673f647378faaa8c233a9d0e3f42a278f7c91350e"
+    },
+    {
+      "onion": "evangelinee67eq2oxpyoe74wof5a4gfdjau7rm5vrrwfi262zr2frid.onion",
+      "pubkey_hex": "2540d311686909ef921a75df8713fcb38bd070c51a414fc59dac6362a35ed663",
+      "message": "Proof of possession for Evangeline Kamin's preprint 'High-Throughput Ed25519 Vanity Search in HIP Across Three Generations of AMD Instinct GPUs' (8x MI355X run, 2026-10-17).",
+      "signature_hex": "204c2393caa8bf76773a5b5d418d48bcd5821178d63847d45fc33232f459861ae3aeeacdaa8981236281c7924d0544aeabda98987c27c065d7281c2c2584c002"
+    },
+    {
+      "onion": "evangelinexigloorydxdskxmoqbqtpcss53nutkk33zlduo6ggdlqid.onion",
+      "pubkey_hex": "2540d31168692e832dce8e0771c95763a0184de294bbb6d26a56f7958e8ef18c",
+      "message": "Proof of possession for Evangeline Kamin's preprint 'High-Throughput Ed25519 Vanity Search in HIP Across Three Generations of AMD Instinct GPUs' (8x MI355X run, 2026-10-17).",
+      "signature_hex": "9aa8262ca79199f47b3b0bccd7516a5d4712618d46d9c166977884f0b4e4f1370ad48fd8247d699db98ec0b931edf8edebdd74bd7def877e900e70030976f905"
+    }
+  ]
+}
